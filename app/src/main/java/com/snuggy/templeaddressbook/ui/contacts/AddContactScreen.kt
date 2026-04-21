@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -503,7 +504,7 @@ fun AddContactScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp),
+                            .padding(top = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         CompactPremiumDropdownField(
@@ -608,35 +609,44 @@ fun AddContactScreen(
                         .filter { it.isNotBlank() }
                         .groupingBy { it }
                         .eachCount()
-                    emailRows.forEachIndexed { index, row ->
-                        val normalized = normalizedEmail(row.email)
-                        val duplicateWarning = normalized.isNotBlank() && (emailCounts[normalized] ?: 0) > 1
-                        val invalidError = row.email.isNotBlank() && !isValidEmailAddress(row.email)
-                        EmailRowEditor(
-                            selectedLanguage = selectedLanguage,
-                            row = row,
-                            labels = emailLabels(selectedLanguage),
-                            showInvalidError = invalidError,
-                            showDuplicateWarning = duplicateWarning,
-                            onUpdate = { updated -> emailRows[index] = updated },
-                            onSetPrimary = {
-                                emailRows.indices.forEach { i ->
-                                    emailRows[i] = emailRows[i].copy(isPrimary = i == index)
-                                }
-                            },
-                            onDelete = {
-                                if (emailRows.size > 1) {
-                                    val wasPrimary = emailRows[index].isPrimary
-                                    emailRows.removeAt(index)
-                                    if (wasPrimary) {
-                                        val firstFilled = emailRows.indexOfFirst { it.email.isNotBlank() }
-                                        val targetIndex = if (firstFilled >= 0) firstFilled else 0
-                                        emailRows.indices.forEach { i -> emailRows[i] = emailRows[i].copy(isPrimary = i == targetIndex) }
-                                    }
-                                }
-                            },
-                            showDivider = index != emailRows.lastIndex
-                        )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = SearchBg,
+                        border = BorderStroke(1.dp, CardBorder)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)) {
+                            emailRows.forEachIndexed { index, row ->
+                                val normalized = normalizedEmail(row.email)
+                                val duplicateWarning = normalized.isNotBlank() && (emailCounts[normalized] ?: 0) > 1
+                                val invalidError = row.email.isNotBlank() && !isValidEmailAddress(row.email)
+                                EmailRowEditor(
+                                    selectedLanguage = selectedLanguage,
+                                    row = row,
+                                    labels = emailLabels(selectedLanguage),
+                                    showInvalidError = invalidError,
+                                    showDuplicateWarning = duplicateWarning,
+                                    onUpdate = { updated -> emailRows[index] = updated },
+                                    onSetPrimary = {
+                                        emailRows.indices.forEach { i ->
+                                            emailRows[i] = emailRows[i].copy(isPrimary = i == index)
+                                        }
+                                    },
+                                    onDelete = {
+                                        if (emailRows.size > 1) {
+                                            val wasPrimary = emailRows[index].isPrimary
+                                            emailRows.removeAt(index)
+                                            if (wasPrimary) {
+                                                val firstFilled = emailRows.indexOfFirst { it.email.isNotBlank() }
+                                                val targetIndex = if (firstFilled >= 0) firstFilled else 0
+                                                emailRows.indices.forEach { i -> emailRows[i] = emailRows[i].copy(isPrimary = i == targetIndex) }
+                                            }
+                                        }
+                                    },
+                                    showDivider = index != emailRows.lastIndex
+                                )
+                            }
+                        }
                     }
                     AddInlineAction(label = localizedLabel("+ Add another email", "+ மற்றொரு மின்னஞ்சலை சேர்க்க")) {
                         emailRows.add(EmailRowInput(label = emailLabels(selectedLanguage).first(), isPrimary = false))
@@ -985,52 +995,120 @@ private fun LabeledCompactField(
     capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
     singleLine: Boolean = true,
     minLines: Int = 1,
-    maxLines: Int = 1,
+    maxLines: Int = 6,
     readOnly: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            if (required) Text("*", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    val borderColor = when {
+        !error.isNullOrBlank() -> MaterialTheme.colorScheme.error
+        isFocused -> OrangePrimary.copy(alpha = 0.5f)
+        else -> CardBorder
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = Color(0xFF444444),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp
+            )
+            if (required) {
+                Text(
+                    text = "*",
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
         }
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
+
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = if (singleLine) 50.dp else 92.dp)
-                .let { base -> if (onClick != null) base.clickable { onClick() } else base },
-            placeholder = {
-                if (placeholder.isNotBlank()) {
-                    Text(placeholder, color = MutedText.copy(alpha = 0.8f), fontSize = 14.sp)
+                .let { if (onClick != null) it.clickable { onClick() } else it },
+            shape = RoundedCornerShape(14.dp),
+            color = SearchBg,
+            border = BorderStroke(1.dp, borderColor)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (singleLine) Modifier.height(44.dp)
+                        else Modifier.heightIn(min = 96.dp)
+                    )
+                    .padding(
+                        horizontal = 14.dp,
+                        vertical = if (singleLine) 0.dp else 12.dp
+                    ),
+                verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.weight(1f),
+                    singleLine = singleLine,
+                    maxLines = if (singleLine) 1 else maxLines,
+                    minLines = if (singleLine) 1 else minLines,
+                    readOnly = readOnly,
+                    interactionSource = interactionSource,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = Color(0xFF202020),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = keyboardType,
+                        capitalization = capitalization
+                    ),
+                    cursorBrush = SolidColor(OrangePrimary),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart
+                        ) {
+                            if (value.isBlank() && placeholder.isNotBlank()) {
+                                Text(
+                                    text = placeholder,
+                                    color = MutedText.copy(alpha = 0.7f),
+                                    fontSize = 15.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+                if (trailing != null) {
+                    Box(
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    ) {
+                        trailing()
+                    }
                 }
-            },
-            singleLine = singleLine,
-            minLines = minLines,
-            maxLines = maxLines,
-            readOnly = readOnly,
-            trailingIcon = trailing,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = Color(0xFF202020),
-                fontWeight = FontWeight.Medium,
-                fontSize = 15.sp
-            ),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, capitalization = capitalization),
-            shape = RoundedCornerShape(16.dp),
-            supportingText = {
-                if (!error.isNullOrBlank()) Text(error, color = MaterialTheme.colorScheme.error)
-            },
-            isError = !error.isNullOrBlank(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = SearchBg,
-                unfocusedContainerColor = SearchBg,
-                focusedBorderColor = if (error.isNullOrBlank()) OrangePrimary.copy(alpha = 0.45f) else MaterialTheme.colorScheme.error,
-                unfocusedBorderColor = if (error.isNullOrBlank()) CardBorder else MaterialTheme.colorScheme.error,
-                cursorColor = OrangePrimary
+            }
+        }
+
+        if (!error.isNullOrBlank()) {
+            Text(
+                text = error,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(start = 4.dp)
             )
-        )
+        }
     }
 }
 
@@ -1067,40 +1145,86 @@ private fun DobField(
     onOpenPicker: () -> Unit
 ) {
     val label = if (selectedLanguage == "TA") "பிறந்த தேதி" else "Date of Birth"
-    val placeholder = if (selectedLanguage == "TA") "DD/MM/YYYY" else "DD/MM/YYYY"
+    val placeholder = "DD/MM/YYYY"
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 50.dp),
-            placeholder = { Text(placeholder, color = MutedText.copy(alpha = 0.8f), fontSize = 14.sp) },
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = Color(0xFF202020),
-                fontWeight = FontWeight.Medium,
-                fontSize = 15.sp
-            ),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            trailingIcon = {
-                IconButton(onClick = onOpenPicker, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = MutedText)
-                }
-            },
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = SearchBg,
-                unfocusedContainerColor = SearchBg,
-                focusedBorderColor = OrangePrimary.copy(alpha = 0.45f),
-                unfocusedBorderColor = CardBorder,
-                cursorColor = OrangePrimary
-            )
+        Text(
+            text = label,
+            color = Color(0xFF444444),
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.sp
         )
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = SearchBg,
+            border = BorderStroke(
+                1.dp,
+                if (isFocused) OrangePrimary.copy(alpha = 0.5f) else CardBorder
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 14.dp),
+                    singleLine = true,
+                    interactionSource = interactionSource,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = Color(0xFF202020),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp
+                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    cursorBrush = SolidColor(OrangePrimary),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (value.text.isBlank()) {
+                                Text(
+                                    text = placeholder,
+                                    color = MutedText.copy(alpha = 0.7f),
+                                    fontSize = 15.sp
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clickable { onOpenPicker() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.CalendarMonth,
+                            contentDescription = null,
+                            tint = MutedText,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1117,10 +1241,10 @@ private fun CompactPremiumDropdownField(
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-        Box {
+        Box(modifier = Modifier.wrapContentWidth()) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .wrapContentWidth()
                     .clickable(onClick = onExpandedChange),
                 shape = RoundedCornerShape(10.dp),
                 color = CardWhite,
@@ -1129,13 +1253,13 @@ private fun CompactPremiumDropdownField(
                 Row(
                     modifier = Modifier
                         .defaultMinSize(minHeight = 26.dp)
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                        .widthIn(min = 92.dp, max = 172.dp)
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         text = value.ifBlank { placeholder },
-                        modifier = Modifier.weight(1f, fill = false),
                         color = if (value.isBlank()) MutedText.copy(alpha = 0.85f) else Color(0xFF202020),
                         fontWeight = FontWeight.Medium,
                         fontSize = 12.sp,
@@ -1189,34 +1313,51 @@ private fun SelectionField(
 ) {
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-        Surface(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onExpandedChange),
-            shape = RoundedCornerShape(16.dp),
-            color = CardWhite,
-            border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.40f) else CardBorder)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically
+        Box {
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onExpandedChange),
+                shape = RoundedCornerShape(16.dp),
+                color = CardWhite,
+                border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.40f) else CardBorder)
             ) {
-                Text(
-                    text = value.ifBlank { placeholder },
-                    modifier = Modifier.weight(1f),
-                    color = if (value.isBlank()) MutedText.copy(alpha = 0.85f) else Color(0xFF202020),
-                    fontWeight = if (value.isBlank()) FontWeight.Medium else FontWeight.SemiBold
-                )
-                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText)
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = value.ifBlank { placeholder },
+                        color = if (value.isBlank()) MutedText.copy(alpha = 0.85f) else Color(0xFF202020),
+                        fontWeight = if (value.isBlank()) FontWeight.Medium else FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText, modifier = Modifier.size(16.dp))
+                }
             }
-        }
-        if (expanded) {
-            OptionPickerDialog(
-                title = label,
-                options = options,
-                selectedLabel = value,
-                labelForOption = { it as String },
-                onDismiss = onExpandedChange,
-                onSelected = { onSelected(it as String) }
-            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = onExpandedChange,
+                modifier = Modifier.heightIn(max = 280.dp)
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
+                            )
+                        },
+                        onClick = { onSelected(option) },
+                        trailingIcon = if (option == value) {
+                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -1304,49 +1445,64 @@ private fun CompactSelectionPicker(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = modifier.clickable { expanded = true },
-        shape = RoundedCornerShape(10.dp),
-        color = CardWhite,
-        border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.34f) else CardBorder)
-    ) {
-        Row(
-            modifier = Modifier
-                .defaultMinSize(minHeight = 26.dp)
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+    Box(modifier = modifier) {
+        Surface(
+            modifier = Modifier.clickable { expanded = true },
+            shape = RoundedCornerShape(10.dp),
+            color = CardWhite,
+            border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.34f) else CardBorder)
         ) {
-            Text(
-                text = value.ifBlank { localizedSelectionPlaceholder(title) },
-                modifier = Modifier.weight(1f, fill = false),
-                color = if (value.isBlank()) MutedText.copy(alpha = 0.85f) else Color(0xFF202020),
-                fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Icon(
-                Icons.Outlined.KeyboardArrowDown,
-                contentDescription = null,
-                tint = MutedText,
-                modifier = Modifier.size(14.dp)
-            )
-        }
-    }
-
-    if (expanded) {
-        OptionPickerDialog(
-            title = title,
-            options = options,
-            selectedLabel = value,
-            labelForOption = { it as String },
-            onDismiss = { expanded = false },
-            onSelected = {
-                expanded = false
-                onSelected(it as String)
+            Row(
+                modifier = Modifier
+                    .defaultMinSize(minHeight = 26.dp)
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = value.ifBlank { localizedSelectionPlaceholder(title) },
+                    modifier = Modifier.weight(1f, fill = false),
+                    color = if (value.isBlank()) MutedText.copy(alpha = 0.85f) else Color(0xFF202020),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MutedText,
+                    modifier = Modifier.size(14.dp)
+                )
             }
-        )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.heightIn(max = 280.dp)
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(option)
+                    },
+                    trailingIcon = if (option == value) {
+                        { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
+                    } else null,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                )
+            }
+        }
     }
 }
 
@@ -1512,40 +1668,56 @@ private fun CountryCodePicker(
     embedded: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Surface(
-        modifier = modifier.clickable { expanded = true },
-        shape = RoundedCornerShape(if (embedded) 10.dp else 16.dp),
-        color = if (embedded) SearchBg else CardWhite,
-        border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.34f) else CardBorder)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = if (embedded) 6.dp else 14.dp, vertical = if (embedded) 5.dp else 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(if (embedded) 2.dp else 2.dp)
+    Box(modifier = modifier) {
+        Surface(
+            modifier = Modifier.clickable { expanded = true },
+            shape = RoundedCornerShape(if (embedded) 10.dp else 16.dp),
+            color = if (embedded) SearchBg else CardWhite,
+            border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.34f) else CardBorder)
         ) {
-            Text(
-                text = if (embedded) country.code else "${country.code} ${country.compactLabel}",
-                color = Color(0xFF202020),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = if (embedded) 12.sp else 9.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText, modifier = Modifier.size(9.dp))
+            Row(
+                modifier = Modifier.padding(horizontal = if (embedded) 6.dp else 14.dp, vertical = if (embedded) 5.dp else 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = if (embedded) country.code else "${country.code} ${country.compactLabel}",
+                    color = Color(0xFF202020),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = if (embedded) 12.sp else 9.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText, modifier = Modifier.size(9.dp))
+            }
         }
-    }
-    if (expanded) {
-        OptionPickerDialog(
-            title = if (selectedLanguage == "TA") "நாட்டை தேர்வு செய்க" else "Select Country",
-            options = COUNTRY_OPTIONS,
-            selectedLabel = country.code,
-            labelForOption = { option ->
-                val item = option as CountryOption
-                "${item.flag} ${if (selectedLanguage == "TA" && item.nameTa.isNotBlank()) item.nameTa else item.nameEn}  ${item.code}"
-            },
-            onDismiss = { expanded = false },
-            onSelected = { onSelected(it as CountryOption) }
-        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.heightIn(max = 320.dp)
+        ) {
+            COUNTRY_OPTIONS.forEach { item ->
+                val optionLabel = "${item.flag} ${if (selectedLanguage == "TA" && item.nameTa.isNotBlank()) item.nameTa else item.nameEn}  ${item.code}"
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = optionLabel,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = if (item.code == country.code && item.compactLabel == country.compactLabel) FontWeight.SemiBold else FontWeight.Medium
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(item)
+                    },
+                    trailingIcon = if (item.code == country.code && item.compactLabel == country.compactLabel) {
+                        { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
+                    } else null,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                )
+            }
+        }
     }
 }
 
@@ -1796,37 +1968,54 @@ private fun SmallSelectionField(label: String, value: String, options: List<Stri
     var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-        Surface(
-            modifier = Modifier.fillMaxWidth().clickable { expanded = true },
-            shape = RoundedCornerShape(16.dp),
-            color = CardWhite,
-            border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.40f) else CardBorder)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically
+        Box {
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = true },
+                shape = RoundedCornerShape(16.dp),
+                color = CardWhite,
+                border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.40f) else CardBorder)
             ) {
-                Text(
-                    value.ifBlank { localizedSelectionPlaceholder(label) },
-                    modifier = Modifier.weight(1f),
-                    color = if (value.isBlank()) MutedText.copy(alpha = 0.85f) else Color(0xFF202020),
-                    fontWeight = if (value.isBlank()) FontWeight.Medium else FontWeight.SemiBold
-                )
-                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText)
-            }
-        }
-        if (expanded) {
-            OptionPickerDialog(
-                title = label,
-                options = options,
-                selectedLabel = value,
-                labelForOption = { it as String },
-                onDismiss = { expanded = false },
-                onSelected = {
-                    expanded = false
-                    onSelected(it as String)
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        value.ifBlank { localizedSelectionPlaceholder(label) },
+                        color = if (value.isBlank()) MutedText.copy(alpha = 0.85f) else Color(0xFF202020),
+                        fontWeight = if (value.isBlank()) FontWeight.Medium else FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText, modifier = Modifier.size(16.dp))
                 }
-            )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.heightIn(max = 280.dp)
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
+                            )
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelected(option)
+                        },
+                        trailingIcon = if (option == value) {
+                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+            }
         }
     }
 }
