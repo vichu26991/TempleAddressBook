@@ -1,31 +1,36 @@
 import org.gradle.api.tasks.Copy
 
-val appVersionCode = 28
-val appVersionName = "1.2.23-rasi-nakshatra-inline-premium"
-val appBuildDate = "2026-04-20"
+val appVersionCode = 31
+val appVersionName = "1.2.24-address-labels-map-chooser-fix"
+val appBuildDate = "2026-04-25"
 
 val appBuildNotes = listOf(
-    "Moved Rasi and Nakshatra onto the same line in Basic Info.",
-    "Changed Rasi and Nakshatra to compact dropdown style closer to Phone/Email Type dropdown family.",
-    "Replaced older picker feel for Rasi/Nakshatra with faster inline dropdown menu.",
-    "Kept Phone Numbers section untouched.",
-    "Kept Email Address section untouched.",
+    "Kept District, State, and Country as textbox fields in Add Contact.",
+    "Retained the updated Address labels/placeholders already present in the latest AddContactScreen source.",
+    "Fixed only openMapChooser() so chooser behavior now follows the locked 3-use-case rule.",
+    "Map link opens chooser when present.",
+    "Address query opens chooser when map link is empty but address exists.",
+    "When both address and map link are empty, chooser still opens with a generic geo intent and no snackbar.",
+    "Phone section, Email section, and the Google Map Link field UI block were kept unchanged.",
     "About build info updated for this build."
-).joinToString("\n")
+).joinToString("\\n")
 
 val appChangedFiles = listOf(
     "app/build.gradle.kts",
-    "ui/contacts/AddContactScreen.kt"
-).joinToString("\n")
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt",
+    "CHANGELOG.md",
+    "BUILD_HISTORY.md",
+    "README.md"
+).joinToString("\\n")
 
 val appTestFocus = listOf(
-    "Rasi and Nakshatra should appear on the same line in Basic Info.",
-    "Both compact dropdowns should visually match the Type dropdown family more closely.",
-    "Tapping Rasi/Nakshatra should open a faster inline dropdown menu instead of the older picker feel.",
-    "Selected values should remain visible in both EN and TA without truncating too early.",
-    "Phone section should remain unchanged.",
-    "Email section should remain unchanged."
-).joinToString("\n")
+    "Tap map icon with map link filled -> chooser should open with the link.",
+    "Tap map icon with address filled and map link empty -> chooser should open with address query.",
+    "Tap map icon with both address and map link empty -> chooser should still open and no snackbar should appear.",
+    "Address labels/placeholders should remain as in the latest stable source.",
+    "District, State, and Country should remain textbox fields.",
+    "Phone and Email sections should remain visually and functionally unchanged."
+).joinToString("\\n")
 
 fun buildConfigString(value: String): String = buildString {
     append("\"")

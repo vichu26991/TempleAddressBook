@@ -2,6 +2,7 @@ package com.snuggy.templeaddressbook.ui.contacts
 
 import android.app.DatePickerDialog
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.AlertDialog
@@ -149,8 +151,8 @@ fun AddContactScreen(
     var nakshatra by rememberSaveable { mutableStateOf("") }
     var villageTown by rememberSaveable { mutableStateOf("") }
     var district by rememberSaveable { mutableStateOf("") }
-    var state by rememberSaveable { mutableStateOf("Tamil Nadu") }
-    var country by rememberSaveable { mutableStateOf("India") }
+    var state by rememberSaveable { mutableStateOf("") }
+    var country by rememberSaveable { mutableStateOf("") }
     var doorNo by rememberSaveable { mutableStateOf("") }
     var buildingName by rememberSaveable { mutableStateOf("") }
     var streetName by rememberSaveable { mutableStateOf("") }
@@ -176,6 +178,17 @@ fun AddContactScreen(
     var rasiExpanded by rememberSaveable { mutableStateOf(false) }
     var nakshatraExpanded by rememberSaveable { mutableStateOf(false) }
 
+    var districtExpanded by rememberSaveable { mutableStateOf(false) }
+    var stateExpanded by rememberSaveable { mutableStateOf(false) }
+    var countryExpanded by rememberSaveable { mutableStateOf(false) }
+
+    var districtSearchQuery by rememberSaveable { mutableStateOf("") }
+    var stateSearchQuery by rememberSaveable { mutableStateOf("") }
+    var countrySearchQuery by rememberSaveable { mutableStateOf("") }
+
+    var addressStatePinned by rememberSaveable { mutableStateOf(false) }
+    var addressCountryPinned by rememberSaveable { mutableStateOf(false) }
+
     val phoneRows = remember {
         mutableStateListOf(
             PhoneRowInput(
@@ -199,6 +212,10 @@ fun AddContactScreen(
             listOf("Thai Amavasai", "Nirvaga", "Committee", "New Family", "Donor")
         }
     }
+    val addressDistrictHistory = remember { mutableStateListOf<String>().apply { addAll(loadAddressSuggestionHistory(context, ADDRESS_HISTORY_DISTRICT)) } }
+    val addressStateHistory = remember { mutableStateListOf<String>().apply { addAll(loadAddressSuggestionHistory(context, ADDRESS_HISTORY_STATE)) } }
+    val addressCountryHistory = remember { mutableStateListOf<String>().apply { addAll(loadAddressSuggestionHistory(context, ADDRESS_HISTORY_COUNTRY)) } }
+
 
     LaunchedEffect(selectedLanguage) {
         gender = localizeGenderValue(gender, selectedLanguage)
@@ -252,6 +269,94 @@ fun AddContactScreen(
 
     fun localizedLabel(en: String, ta: String): String = if (selectedLanguage == "TA") ta else en
 
+    val addressCountryOptionsForUi = remember(selectedLanguage, addressCountryHistory.toList()) {
+        mergeAddressSuggestionOptions(
+            builtIn = addressCountryOptions(selectedLanguage),
+            history = addressCountryHistory
+        )
+    }
+    val addressStateOptionsForUi = remember(country, selectedLanguage, addressCountryPinned, addressStateHistory.toList()) {
+        mergeAddressSuggestionOptions(
+            builtIn = addressStateOptions(
+                country = country,
+                selectedLanguage = selectedLanguage,
+                filterByCountry = addressCountryPinned
+            ),
+            history = addressStateHistory
+        )
+    }
+    val addressDistrictOptionsForUi = remember(
+        state,
+        country,
+        selectedLanguage,
+        addressStatePinned,
+        addressCountryPinned,
+        addressDistrictHistory.toList()
+    ) {
+        mergeAddressSuggestionOptions(
+            builtIn = addressDistrictOptions(
+                country = country,
+                state = state,
+                selectedLanguage = selectedLanguage,
+                filterByCountry = addressCountryPinned,
+                filterByState = addressStatePinned
+            ),
+            history = addressDistrictHistory
+        )
+    }
+
+    fun postalCodePlaceholder(): String =
+        if (isIndiaCountry(country)) {
+            localizedLabel("6 digits", "6 எண்கள்")
+        } else {
+            "A1B 2C3"
+        }
+
+    fun addressQueryText(): String =
+        listOf(
+            doorNo,
+            buildingName,
+            streetName,
+            area,
+            postOffice,
+            taluk,
+            villageTown,
+            district,
+            state,
+            pinCode,
+            country
+        ).map { it.trim() }
+            .filter { it.isNotBlank() }
+            .joinToString(", ")
+
+    fun openMapChooser() {
+        val rawTarget = googleMapLink.trim().ifBlank { addressQueryText() }
+
+        val targetUri = if (rawTarget.startsWith("http://", ignoreCase = true) || rawTarget.startsWith("https://", ignoreCase = true)) {
+            Uri.parse(rawTarget)
+        } else {
+            Uri.parse("geo:0,0?q=${Uri.encode(rawTarget)}")
+        }
+
+        val chooser = Intent.createChooser(
+            Intent(Intent.ACTION_VIEW, targetUri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+            localizedLabel("Open with", "இதன் மூலம் திற")
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        runCatching { context.startActivity(chooser) }
+            .onFailure {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        localizedLabel("No map app available", "மேப் பயன்பாடு கிடைக்கவில்லை")
+                    )
+                }
+            }
+    }
+
     fun hasChanges(): Boolean = firstName.isNotBlank() ||
             lastName.isNotBlank() ||
             gender.isNotBlank() ||
@@ -260,8 +365,8 @@ fun AddContactScreen(
             nakshatra.isNotBlank() ||
             villageTown.isNotBlank() ||
             district.isNotBlank() ||
-            state != "Tamil Nadu" ||
-            country != "India" ||
+            state.isNotBlank() ||
+            country.isNotBlank() ||
             doorNo.isNotBlank() ||
             buildingName.isNotBlank() ||
             streetName.isNotBlank() ||
@@ -316,6 +421,15 @@ fun AddContactScreen(
         }
     }
 
+    fun persistAddressSuggestions() {
+        addAddressSuggestion(addressDistrictHistory, district)
+        addAddressSuggestion(addressStateHistory, state)
+        addAddressSuggestion(addressCountryHistory, country)
+        persistAddressSuggestionHistory(context, ADDRESS_HISTORY_DISTRICT, addressDistrictHistory)
+        persistAddressSuggestionHistory(context, ADDRESS_HISTORY_STATE, addressStateHistory)
+        persistAddressSuggestionHistory(context, ADDRESS_HISTORY_COUNTRY, addressCountryHistory)
+    }
+
     fun saveContact() {
         saveAttempted = true
         if (firstName.isBlank() || phoneRows.none { it.localNumber.isNotBlank() }) {
@@ -353,6 +467,7 @@ fun AddContactScreen(
         val primaryPhoneRow = phoneRows.firstOrNull { it.localNumber.isNotBlank() && it.isPrimary }
             ?: phoneRows.firstOrNull { it.localNumber.isNotBlank() }
         val fullPhone = primaryPhoneRow?.let { "${it.country.code} ${it.localNumber.trim()}" } ?: ""
+        persistAddressSuggestions()
         onSave(
             ContactDraft(
                 firstName = firstName.trim(),
@@ -502,9 +617,7 @@ fun AddContactScreen(
                         onOpenPicker = { showDatePicker(context, dobField.text) { dobField = TextFieldValue(it, TextRange(it.length)) } }
                     )
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         CompactPremiumDropdownField(
@@ -660,31 +773,112 @@ fun AddContactScreen(
                         activeSection = if (activeSection == AddSection.ADDRESS) null else AddSection.ADDRESS
                     }
                 ) {
-                    LabeledCompactField(label = localizedLabel("Door No", "வீட்டு எண்"), value = doorNo, onValueChange = { doorNo = it })
-                    LabeledCompactField(label = localizedLabel("Building Name", "கட்டிடம் பெயர்"), value = buildingName, onValueChange = { buildingName = it })
-                    LabeledCompactField(label = localizedLabel("Street Name", "தெரு பெயர்"), value = streetName, onValueChange = { streetName = it })
-                    LabeledCompactField(label = localizedLabel("Village / Area", "கிராமம் / பகுதி"), value = area, onValueChange = { area = it })
-                    LabeledCompactField(label = localizedLabel("Post Office", "அஞ்சலகம்"), value = postOffice, onValueChange = { postOffice = it })
-                    LabeledCompactField(label = localizedLabel("Taluk", "தாலுகா"), value = taluk, onValueChange = { taluk = it })
-                    LabeledCompactField(label = localizedLabel("City / Town", "நகரம் / ஊர்"), value = villageTown, onValueChange = { villageTown = it })
-                    LabeledCompactField(label = localizedLabel("District", "மாவட்டம்"), value = district, onValueChange = { district = it })
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        LabeledCompactField(
-                            label = localizedLabel("State", "மாநிலம்"),
-                            value = state,
-                            onValueChange = { state = it },
-                            modifier = Modifier.weight(1f)
-                        )
-                        LabeledCompactField(
-                            label = localizedLabel("PIN Code", "அஞ்சல் குறியீடு"),
-                            value = pinCode,
-                            onValueChange = { pinCode = it.filter(Char::isDigit).take(6) },
-                            keyboardType = KeyboardType.Number,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    LabeledCompactField(label = localizedLabel("Country", "நாடு"), value = country, onValueChange = { country = it })
-                    LabeledCompactField(label = localizedLabel("Google Map Link", "கூகுள் மேப் இணைப்பு"), value = googleMapLink, onValueChange = { googleMapLink = it })
+                    val isIndia = isIndiaCountry(country)
+
+                    LabeledCompactField(
+                        label = addressFieldText("doorNo", isIndia, selectedLanguage).label,
+                        value = doorNo,
+                        onValueChange = { doorNo = it },
+                        placeholder = addressFieldText("doorNo", isIndia, selectedLanguage).placeholder
+                    )
+                    LabeledCompactField(
+                        label = addressFieldText("buildingName", isIndia, selectedLanguage).label,
+                        value = buildingName,
+                        onValueChange = { buildingName = it },
+                        placeholder = addressFieldText("buildingName", isIndia, selectedLanguage).placeholder
+                    )
+                    LabeledCompactField(
+                        label = addressFieldText("streetName", isIndia, selectedLanguage).label,
+                        value = streetName,
+                        onValueChange = { streetName = it },
+                        placeholder = addressFieldText("streetName", isIndia, selectedLanguage).placeholder
+                    )
+                    LabeledCompactField(
+                        label = addressFieldText("area", isIndia, selectedLanguage).label,
+                        value = area,
+                        onValueChange = { area = it },
+                        placeholder = addressFieldText("area", isIndia, selectedLanguage).placeholder
+                    )
+                    LabeledCompactField(
+                        label = addressFieldText("postOffice", isIndia, selectedLanguage).label,
+                        value = postOffice,
+                        onValueChange = { postOffice = it },
+                        placeholder = addressFieldText("postOffice", isIndia, selectedLanguage).placeholder
+                    )
+                    LabeledCompactField(
+                        label = addressFieldText("taluk", isIndia, selectedLanguage).label,
+                        value = taluk,
+                        onValueChange = { taluk = it },
+                        placeholder = addressFieldText("taluk", isIndia, selectedLanguage).placeholder
+                    )
+                    LabeledCompactField(
+                        label = localizedLabel("City / Town", "நகரம் / ஊர்"),
+                        value = villageTown,
+                        onValueChange = { villageTown = it },
+                        placeholder = localizedLabel("City / Town", "நகரம் / ஊர்")
+                    )
+
+                    LabeledCompactField(
+                        label = addressFieldText("district", isIndia, selectedLanguage).label,
+                        value = district,
+                        onValueChange = { district = it },
+                        placeholder = addressFieldText("district", isIndia, selectedLanguage).placeholder
+                    )
+
+                    LabeledCompactField(
+                        label = addressFieldText("state", isIndia, selectedLanguage).label,
+                        value = state,
+                        onValueChange = { state = it },
+                        placeholder = addressFieldText("state", isIndia, selectedLanguage).placeholder
+                    )
+
+                    LabeledCompactField(
+                        label = localizedLabel("Country", "நாடு"),
+                        value = country,
+                        onValueChange = { country = it },
+                        placeholder = localizedLabel("Country", "நாடு")
+                    )
+
+                    LabeledCompactField(
+                        label = if (isIndia) {
+                            localizedLabel("PIN Code", "அஞ்சல் குறியீடு")
+                        } else {
+                            localizedLabel("PIN / Postal / ZIP Code", "அஞ்சல் / ZIP குறியீடு")
+                        },
+                        value = pinCode,
+                        onValueChange = { pinCode = sanitizePostalCodeInput(country, it) },
+                        placeholder = postalCodePlaceholder(),
+                        keyboardType = if (isIndia) KeyboardType.Number else KeyboardType.Text,
+                        error = postalCodeError(pinCode, country, selectedLanguage)
+                    )
+
+                    LabeledCompactField(
+                        label = localizedLabel("Google Map Link", "கூகுள் மேப் இணைப்பு"),
+                        value = googleMapLink,
+                        onValueChange = { googleMapLink = it },
+                        placeholder = localizedLabel("Map link", "மேப் இணைப்பு"),
+                        keyboardType = KeyboardType.Uri,
+                        trailing = {
+                            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                                Surface(
+                                    onClick = { openMapChooser() },
+                                    shape = CircleShape,
+                                    color = CardWhite,
+                                    border = BorderStroke(1.dp, CardBorder),
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            Icons.Outlined.MyLocation,
+                                            contentDescription = "Map",
+                                            tint = OrangePrimary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    )
                 }
 
                 SectionCard(
@@ -1253,7 +1447,7 @@ private fun CompactPremiumDropdownField(
                 Row(
                     modifier = Modifier
                         .defaultMinSize(minHeight = 26.dp)
-                        .widthIn(min = 92.dp, max = 172.dp)
+                        .widthIn(min = 66.dp, max = 220.dp)
                         .padding(horizontal = 10.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1300,6 +1494,243 @@ private fun CompactPremiumDropdownField(
         }
     }
 }
+
+@Composable
+private fun SearchableCompactPremiumDropdownField(
+    label: String,
+    value: String,
+    placeholder: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    options: List<String>,
+    searchPlaceholder: String,
+    noResultsText: String,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val filteredOptions = remember(searchQuery, options) {
+        if (searchQuery.isBlank()) options else options.filter { it.contains(searchQuery, ignoreCase = true) }
+    }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Box(modifier = Modifier.wrapContentWidth()) {
+            Surface(
+                modifier = Modifier
+                    .wrapContentWidth()
+                    .clickable { onExpandedChange(true) },
+                shape = RoundedCornerShape(10.dp),
+                color = CardWhite,
+                border = BorderStroke(1.dp, if (expanded) SuccessGreen.copy(alpha = 0.34f) else CardBorder)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 26.dp)
+                        .widthIn(min = 66.dp, max = 240.dp)
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = value.ifBlank { placeholder },
+                        color = if (value.isBlank()) MutedText.copy(alpha = 0.85f) else Color(0xFF202020),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(
+                        Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MutedText,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { onExpandedChange(false) },
+                modifier = Modifier.heightIn(max = 320.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp, vertical = 8.dp)
+                        .widthIn(min = 220.dp, max = 320.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = SearchBg,
+                        border = BorderStroke(1.dp, CardBorder)
+                    ) {
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = onSearchQueryChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = Color(0xFF202020),
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 14.sp
+                            ),
+                            cursorBrush = SolidColor(OrangePrimary),
+                            decorationBox = { innerTextField ->
+                                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                                    if (searchQuery.isBlank()) {
+                                        Text(
+                                            text = searchPlaceholder,
+                                            color = MutedText.copy(alpha = 0.75f),
+                                            fontSize = 14.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            }
+                        )
+                    }
+                }
+
+                if (filteredOptions.isEmpty()) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = noResultsText,
+                                color = MutedText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        onClick = {},
+                        enabled = false
+                    )
+                } else {
+                    filteredOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = option,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
+                                )
+                            },
+                            onClick = {
+                                onSelected(option)
+                                onExpandedChange(false)
+                            },
+                            trailingIcon = if (option == value) {
+                                { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditableSearchableAddressField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    options: List<String>,
+    noResultsText: String,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val filteredOptions = remember(value, options) {
+        val query = value.trim()
+        if (query.isBlank()) {
+            options
+        } else {
+            options.filter { it.contains(query, ignoreCase = true) }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        LabeledCompactField(
+            label = label,
+            value = value,
+            onValueChange = {
+                onValueChange(it)
+                onExpandedChange(true)
+            },
+            placeholder = placeholder,
+            trailing = {
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable { onExpandedChange(!expanded) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = MutedText,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            },
+            onClick = { onExpandedChange(true) }
+        )
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.heightIn(max = 320.dp)
+        ) {
+            if (filteredOptions.isEmpty()) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = noResultsText,
+                            color = MutedText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    onClick = {},
+                    enabled = false
+                )
+            } else {
+                filteredOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
+                            )
+                        },
+                        onClick = {
+                            onSelected(option)
+                            onExpandedChange(false)
+                        },
+                        trailingIcon = if (option == value) {
+                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun SelectionField(
@@ -2365,6 +2796,119 @@ private fun localizeMappedValue(value: String, selectedLanguage: String, mapping
     return if (selectedLanguage == "TA") match.second else match.first
 }
 
+private data class AddressFieldText(
+    val label: String,
+    val placeholder: String
+)
+
+private fun addressFieldText(
+    field: String,
+    isIndia: Boolean,
+    selectedLanguage: String
+): AddressFieldText {
+    val ta = selectedLanguage == "TA"
+
+    return when (field) {
+        "doorNo" -> if (isIndia) {
+            AddressFieldText(
+                label = if (ta) "வீட்டு எண்" else "Door No",
+                placeholder = if (ta) "கதவு எண்" else "Door No"
+            )
+        } else {
+            AddressFieldText(
+                label = if (ta) "வீட்டு எண் / யூனிட் / அப்ட் எண்" else "Door No / Unit / Apt No",
+                placeholder = if (ta) "கதவு எண் / யூனிட்" else "Door No / Unit"
+            )
+        }
+
+        "buildingName" -> if (isIndia) {
+            AddressFieldText(
+                label = if (ta) "கட்டிடம் பெயர்" else "Building Name",
+                placeholder = if (ta) "கட்டிடம்" else "Building"
+            )
+        } else {
+            AddressFieldText(
+                label = if (ta) "கட்டிடம் / டவர்" else "Building Name / Tower",
+                placeholder = if (ta) "கட்டிடம் / டவர்" else "Building / Tower"
+            )
+        }
+
+        "streetName" -> if (isIndia) {
+            AddressFieldText(
+                label = if (ta) "தெரு பெயர்" else "Street Name",
+                placeholder = if (ta) "தெரு" else "Street"
+            )
+        } else {
+            AddressFieldText(
+                label = if (ta) "தெரு பெயர் / தெரு / அவென்யூ" else "Street Name / Street / Avenue",
+                placeholder = if (ta) "தெரு / அவென்யூ" else "Street / Avenue"
+            )
+        }
+
+        "area" -> if (isIndia) {
+            AddressFieldText(
+                label = if (ta) "கிராமம் / பகுதி" else "Village / Area",
+                placeholder = if (ta) "பகுதி" else "Area"
+            )
+        } else {
+            AddressFieldText(
+                label = if (ta) "கிராமம் / பகுதி / இருப்பிடம்" else "Village / Area / Locality",
+                placeholder = if (ta) "பகுதி / இருப்பிடம்" else "Area / Locality"
+            )
+        }
+
+        "postOffice" -> if (isIndia) {
+            AddressFieldText(
+                label = if (ta) "அஞ்சலகம்" else "Post Office",
+                placeholder = if (ta) "அஞ்சலகம்" else "Post Office"
+            )
+        } else {
+            AddressFieldText(
+                label = if (ta) "அஞ்சலகம் / மெயில் பகுதி" else "Post Office / Mail Area",
+                placeholder = if (ta) "மெயில் பகுதி" else "Mail Area"
+            )
+        }
+
+        "taluk" -> if (isIndia) {
+            AddressFieldText(
+                label = if (ta) "தாலுகா" else "Taluk",
+                placeholder = if (ta) "தாலுகா" else "Taluk"
+            )
+        } else {
+            AddressFieldText(
+                label = if (ta) "தாலுகா / கவுண்டி" else "Taluk / County",
+                placeholder = if (ta) "கவுண்டி" else "County"
+            )
+        }
+
+        "district" -> if (isIndia) {
+            AddressFieldText(
+                label = if (ta) "மாவட்டம்" else "District",
+                placeholder = if (ta) "மாவட்டம்" else "District"
+            )
+        } else {
+            AddressFieldText(
+                label = if (ta) "மாவட்டம் / கவுண்டி" else "District / County",
+                placeholder = if (ta) "மாவட்டம் / கவுண்டி" else "District / County"
+            )
+        }
+
+        "state" -> if (isIndia) {
+            AddressFieldText(
+                label = if (ta) "மாநிலம்" else "State",
+                placeholder = if (ta) "மாநிலம்" else "State"
+            )
+        } else {
+            AddressFieldText(
+                label = if (ta) "மாநிலம் / மாகாணம் / பிராந்தியம்" else "State / Province / Region",
+                placeholder = if (ta) "மாநிலம் / மாகாணம்" else "State / Province"
+            )
+        }
+
+        else -> AddressFieldText(label = field, placeholder = "")
+    }
+}
+
 private data class PhoneDigitRule(val minDigits: Int, val maxDigits: Int)
 
 private fun phoneRuleFor(country: CountryOption): PhoneDigitRule = when (country.code) {
@@ -2415,6 +2959,839 @@ private inline fun <T> Iterable<T>.anyIndexed(predicate: (Int, T) -> Boolean): B
 }
 
 private fun PhoneRowInput.localDigits(): String = localNumber.filter(Char::isDigit)
+
+
+
+private data class AddressDistrictPath(
+    val district: String,
+    val state: String,
+    val country: String
+)
+
+private val INDIA_STATE_NAMES = listOf(
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chhattisgarh",
+    "Goa",
+    "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
+    "Uttar Pradesh",
+    "Uttarakhand",
+    "West Bengal",
+    "Andaman and Nicobar Islands",
+    "Chandigarh",
+    "Dadra and Nagar Haveli and Daman and Diu",
+    "Delhi",
+    "Jammu and Kashmir",
+    "Ladakh",
+    "Lakshadweep",
+    "Puducherry"
+)
+
+private val OTHER_STATE_MASTER = mapOf(
+    "United States" to listOf("Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming", "District of Columbia"),
+    "Singapore" to listOf("Singapore"),
+    "United Arab Emirates" to listOf("Abu Dhabi", "Ajman", "Dubai", "Fujairah", "Ras Al Khaimah", "Sharjah", "Umm Al Quwain"),
+    "Malaysia" to listOf("Johor", "Kedah", "Kelantan", "Kuala Lumpur", "Labuan", "Malacca", "Negeri Sembilan", "Pahang", "Penang", "Perak", "Perlis", "Putrajaya", "Sabah", "Sarawak", "Selangor", "Terengganu"),
+    "Sri Lanka" to listOf("Central", "Eastern", "North Central", "Northern", "North Western", "Sabaragamuwa", "Southern", "Uva", "Western")
+)
+
+private val ADDRESS_DISTRICT_PATHS = listOf(
+    // Tamil Nadu
+    AddressDistrictPath("Ariyalur", "Tamil Nadu", "India"),
+    AddressDistrictPath("Chengalpattu", "Tamil Nadu", "India"),
+    AddressDistrictPath("Chennai", "Tamil Nadu", "India"),
+    AddressDistrictPath("Coimbatore", "Tamil Nadu", "India"),
+    AddressDistrictPath("Cuddalore", "Tamil Nadu", "India"),
+    AddressDistrictPath("Dharmapuri", "Tamil Nadu", "India"),
+    AddressDistrictPath("Dindigul", "Tamil Nadu", "India"),
+    AddressDistrictPath("Erode", "Tamil Nadu", "India"),
+    AddressDistrictPath("Kallakurichi", "Tamil Nadu", "India"),
+    AddressDistrictPath("Kancheepuram", "Tamil Nadu", "India"),
+    AddressDistrictPath("Kanyakumari", "Tamil Nadu", "India"),
+    AddressDistrictPath("Karur", "Tamil Nadu", "India"),
+    AddressDistrictPath("Krishnagiri", "Tamil Nadu", "India"),
+    AddressDistrictPath("Madurai", "Tamil Nadu", "India"),
+    AddressDistrictPath("Mayiladuthurai", "Tamil Nadu", "India"),
+    AddressDistrictPath("Nagapattinam", "Tamil Nadu", "India"),
+    AddressDistrictPath("Namakkal", "Tamil Nadu", "India"),
+    AddressDistrictPath("Nilgiris", "Tamil Nadu", "India"),
+    AddressDistrictPath("Perambalur", "Tamil Nadu", "India"),
+    AddressDistrictPath("Pudukkottai", "Tamil Nadu", "India"),
+    AddressDistrictPath("Ramanathapuram", "Tamil Nadu", "India"),
+    AddressDistrictPath("Ranipet", "Tamil Nadu", "India"),
+    AddressDistrictPath("Salem", "Tamil Nadu", "India"),
+    AddressDistrictPath("Sivaganga", "Tamil Nadu", "India"),
+    AddressDistrictPath("Tenkasi", "Tamil Nadu", "India"),
+    AddressDistrictPath("Thanjavur", "Tamil Nadu", "India"),
+    AddressDistrictPath("Theni", "Tamil Nadu", "India"),
+    AddressDistrictPath("Thoothukudi", "Tamil Nadu", "India"),
+    AddressDistrictPath("Tiruchirappalli", "Tamil Nadu", "India"),
+    AddressDistrictPath("Tirunelveli", "Tamil Nadu", "India"),
+    AddressDistrictPath("Tirupathur", "Tamil Nadu", "India"),
+    AddressDistrictPath("Tiruppur", "Tamil Nadu", "India"),
+    AddressDistrictPath("Tiruvallur", "Tamil Nadu", "India"),
+    AddressDistrictPath("Tiruvannamalai", "Tamil Nadu", "India"),
+    AddressDistrictPath("Tiruvarur", "Tamil Nadu", "India"),
+    AddressDistrictPath("Vellore", "Tamil Nadu", "India"),
+    AddressDistrictPath("Viluppuram", "Tamil Nadu", "India"),
+    AddressDistrictPath("Virudhunagar", "Tamil Nadu", "India"),
+
+    // Karnataka
+    AddressDistrictPath("Bagalkote", "Karnataka", "India"),
+    AddressDistrictPath("Ballari", "Karnataka", "India"),
+    AddressDistrictPath("Belagavi", "Karnataka", "India"),
+    AddressDistrictPath("Bengaluru Rural", "Karnataka", "India"),
+    AddressDistrictPath("Bengaluru Urban", "Karnataka", "India"),
+    AddressDistrictPath("Bidar", "Karnataka", "India"),
+    AddressDistrictPath("Chamarajanagar", "Karnataka", "India"),
+    AddressDistrictPath("Chikballapur", "Karnataka", "India"),
+    AddressDistrictPath("Chikkamagaluru", "Karnataka", "India"),
+    AddressDistrictPath("Chitradurga", "Karnataka", "India"),
+    AddressDistrictPath("Dakshina Kannada", "Karnataka", "India"),
+    AddressDistrictPath("Davanagere", "Karnataka", "India"),
+    AddressDistrictPath("Dharwad", "Karnataka", "India"),
+    AddressDistrictPath("Gadag", "Karnataka", "India"),
+    AddressDistrictPath("Hassan", "Karnataka", "India"),
+    AddressDistrictPath("Haveri", "Karnataka", "India"),
+    AddressDistrictPath("Kalaburagi", "Karnataka", "India"),
+    AddressDistrictPath("Kodagu", "Karnataka", "India"),
+    AddressDistrictPath("Kolar", "Karnataka", "India"),
+    AddressDistrictPath("Koppal", "Karnataka", "India"),
+    AddressDistrictPath("Mandya", "Karnataka", "India"),
+    AddressDistrictPath("Mysuru", "Karnataka", "India"),
+    AddressDistrictPath("Raichur", "Karnataka", "India"),
+    AddressDistrictPath("Ramanagara", "Karnataka", "India"),
+    AddressDistrictPath("Shivamogga", "Karnataka", "India"),
+    AddressDistrictPath("Tumakuru", "Karnataka", "India"),
+    AddressDistrictPath("Udupi", "Karnataka", "India"),
+    AddressDistrictPath("Uttara Kannada", "Karnataka", "India"),
+    AddressDistrictPath("Vijayapura", "Karnataka", "India"),
+    AddressDistrictPath("Vijayanagara", "Karnataka", "India"),
+    AddressDistrictPath("Yadgir", "Karnataka", "India"),
+
+    // Kerala
+    AddressDistrictPath("Alappuzha", "Kerala", "India"),
+    AddressDistrictPath("Ernakulam", "Kerala", "India"),
+    AddressDistrictPath("Idukki", "Kerala", "India"),
+    AddressDistrictPath("Kannur", "Kerala", "India"),
+    AddressDistrictPath("Kasaragod", "Kerala", "India"),
+    AddressDistrictPath("Kollam", "Kerala", "India"),
+    AddressDistrictPath("Kottayam", "Kerala", "India"),
+    AddressDistrictPath("Kozhikode", "Kerala", "India"),
+    AddressDistrictPath("Malappuram", "Kerala", "India"),
+    AddressDistrictPath("Palakkad", "Kerala", "India"),
+    AddressDistrictPath("Pathanamthitta", "Kerala", "India"),
+    AddressDistrictPath("Thiruvananthapuram", "Kerala", "India"),
+    AddressDistrictPath("Thrissur", "Kerala", "India"),
+    AddressDistrictPath("Wayanad", "Kerala", "India"),
+
+    // Andhra Pradesh
+    AddressDistrictPath("Alluri Sitharama Raju", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Anakapalli", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Ananthapuramu", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Annamayya", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Bapatla", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Chittoor", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Dr. B.R. Ambedkar Konaseema", "Andhra Pradesh", "India"),
+    AddressDistrictPath("East Godavari", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Eluru", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Guntur", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Kakinada", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Krishna", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Kurnool", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Nandyal", "Andhra Pradesh", "India"),
+    AddressDistrictPath("NTR", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Palnadu", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Parvathipuram Manyam", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Prakasam", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Sri Potti Sriramulu Nellore", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Sri Sathya Sai", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Srikakulam", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Tirupati", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Visakhapatnam", "Andhra Pradesh", "India"),
+    AddressDistrictPath("Vizianagaram", "Andhra Pradesh", "India"),
+    AddressDistrictPath("West Godavari", "Andhra Pradesh", "India"),
+    AddressDistrictPath("YSR Kadapa", "Andhra Pradesh", "India"),
+
+    // Telangana
+    AddressDistrictPath("Adilabad", "Telangana", "India"),
+    AddressDistrictPath("Bhadradri Kothagudem", "Telangana", "India"),
+    AddressDistrictPath("Hanamkonda", "Telangana", "India"),
+    AddressDistrictPath("Hyderabad", "Telangana", "India"),
+    AddressDistrictPath("Jagtial", "Telangana", "India"),
+    AddressDistrictPath("Jangaon", "Telangana", "India"),
+    AddressDistrictPath("Jayashankar Bhupalpally", "Telangana", "India"),
+    AddressDistrictPath("Jogulamba Gadwal", "Telangana", "India"),
+    AddressDistrictPath("Kamareddy", "Telangana", "India"),
+    AddressDistrictPath("Karimnagar", "Telangana", "India"),
+    AddressDistrictPath("Khammam", "Telangana", "India"),
+    AddressDistrictPath("Komaram Bheem Asifabad", "Telangana", "India"),
+    AddressDistrictPath("Mahabubabad", "Telangana", "India"),
+    AddressDistrictPath("Mahabubnagar", "Telangana", "India"),
+    AddressDistrictPath("Mancherial", "Telangana", "India"),
+    AddressDistrictPath("Medak", "Telangana", "India"),
+    AddressDistrictPath("Medchal-Malkajgiri", "Telangana", "India"),
+    AddressDistrictPath("Mulugu", "Telangana", "India"),
+    AddressDistrictPath("Nagarkurnool", "Telangana", "India"),
+    AddressDistrictPath("Nalgonda", "Telangana", "India"),
+    AddressDistrictPath("Narayanpet", "Telangana", "India"),
+    AddressDistrictPath("Nirmal", "Telangana", "India"),
+    AddressDistrictPath("Nizamabad", "Telangana", "India"),
+    AddressDistrictPath("Peddapalli", "Telangana", "India"),
+    AddressDistrictPath("Rajanna Sircilla", "Telangana", "India"),
+    AddressDistrictPath("Ranga Reddy", "Telangana", "India"),
+    AddressDistrictPath("Sangareddy", "Telangana", "India"),
+    AddressDistrictPath("Siddipet", "Telangana", "India"),
+    AddressDistrictPath("Suryapet", "Telangana", "India"),
+    AddressDistrictPath("Vikarabad", "Telangana", "India"),
+    AddressDistrictPath("Wanaparthy", "Telangana", "India"),
+    AddressDistrictPath("Warangal", "Telangana", "India"),
+    AddressDistrictPath("Yadadri Bhuvanagiri", "Telangana", "India"),
+
+    // Maharashtra
+    AddressDistrictPath("Ahmednagar", "Maharashtra", "India"),
+    AddressDistrictPath("Akola", "Maharashtra", "India"),
+    AddressDistrictPath("Amravati", "Maharashtra", "India"),
+    AddressDistrictPath("Aurangabad", "Maharashtra", "India"),
+    AddressDistrictPath("Beed", "Maharashtra", "India"),
+    AddressDistrictPath("Bhandara", "Maharashtra", "India"),
+    AddressDistrictPath("Buldhana", "Maharashtra", "India"),
+    AddressDistrictPath("Chandrapur", "Maharashtra", "India"),
+    AddressDistrictPath("Dhule", "Maharashtra", "India"),
+    AddressDistrictPath("Gadchiroli", "Maharashtra", "India"),
+    AddressDistrictPath("Gondia", "Maharashtra", "India"),
+    AddressDistrictPath("Hingoli", "Maharashtra", "India"),
+    AddressDistrictPath("Jalgaon", "Maharashtra", "India"),
+    AddressDistrictPath("Jalna", "Maharashtra", "India"),
+    AddressDistrictPath("Kolhapur", "Maharashtra", "India"),
+    AddressDistrictPath("Latur", "Maharashtra", "India"),
+    AddressDistrictPath("Mumbai City", "Maharashtra", "India"),
+    AddressDistrictPath("Mumbai Suburban", "Maharashtra", "India"),
+    AddressDistrictPath("Nagpur", "Maharashtra", "India"),
+    AddressDistrictPath("Nanded", "Maharashtra", "India"),
+    AddressDistrictPath("Nandurbar", "Maharashtra", "India"),
+    AddressDistrictPath("Nashik", "Maharashtra", "India"),
+    AddressDistrictPath("Osmanabad", "Maharashtra", "India"),
+    AddressDistrictPath("Palghar", "Maharashtra", "India"),
+    AddressDistrictPath("Parbhani", "Maharashtra", "India"),
+    AddressDistrictPath("Pune", "Maharashtra", "India"),
+    AddressDistrictPath("Raigad", "Maharashtra", "India"),
+    AddressDistrictPath("Ratnagiri", "Maharashtra", "India"),
+    AddressDistrictPath("Sangli", "Maharashtra", "India"),
+    AddressDistrictPath("Satara", "Maharashtra", "India"),
+    AddressDistrictPath("Sindhudurg", "Maharashtra", "India"),
+    AddressDistrictPath("Solapur", "Maharashtra", "India"),
+    AddressDistrictPath("Thane", "Maharashtra", "India"),
+    AddressDistrictPath("Wardha", "Maharashtra", "India"),
+    AddressDistrictPath("Washim", "Maharashtra", "India"),
+    AddressDistrictPath("Yavatmal", "Maharashtra", "India"),
+
+    // Other useful India paths
+    AddressDistrictPath("New Delhi", "Delhi", "India"),
+    AddressDistrictPath("Central Delhi", "Delhi", "India"),
+    AddressDistrictPath("North Delhi", "Delhi", "India"),
+    AddressDistrictPath("South Delhi", "Delhi", "India"),
+    AddressDistrictPath("Howrah", "West Bengal", "India"),
+    AddressDistrictPath("Kolkata", "West Bengal", "India"),
+    AddressDistrictPath("Darjeeling", "West Bengal", "India"),
+    AddressDistrictPath("Lucknow", "Uttar Pradesh", "India"),
+    AddressDistrictPath("Varanasi", "Uttar Pradesh", "India"),
+    AddressDistrictPath("Prayagraj", "Uttar Pradesh", "India"),
+    AddressDistrictPath("Kanpur Nagar", "Uttar Pradesh", "India"),
+    AddressDistrictPath("Agra", "Uttar Pradesh", "India"),
+    AddressDistrictPath("Ahmedabad", "Gujarat", "India"),
+    AddressDistrictPath("Surat", "Gujarat", "India"),
+    AddressDistrictPath("Vadodara", "Gujarat", "India"),
+    AddressDistrictPath("Rajkot", "Gujarat", "India"),
+
+    // International examples for ambiguity handling
+    AddressDistrictPath("Queens County", "New York", "United States"),
+    AddressDistrictPath("Los Angeles County", "California", "United States"),
+    AddressDistrictPath("San Diego County", "California", "United States"),
+    AddressDistrictPath("Harris County", "Texas", "United States"),
+    AddressDistrictPath("Dallas County", "Texas", "United States"),
+    AddressDistrictPath("Travis County", "Texas", "United States"),
+    AddressDistrictPath("Dubai", "Dubai", "United Arab Emirates"),
+    AddressDistrictPath("Abu Dhabi", "Abu Dhabi", "United Arab Emirates"),
+    AddressDistrictPath("Sharjah", "Sharjah", "United Arab Emirates"),
+    AddressDistrictPath("Petaling", "Selangor", "Malaysia"),
+    AddressDistrictPath("Klang", "Selangor", "Malaysia"),
+    AddressDistrictPath("Gombak", "Selangor", "Malaysia"),
+    AddressDistrictPath("Colombo", "Western", "Sri Lanka"),
+    AddressDistrictPath("Gampaha", "Western", "Sri Lanka"),
+    AddressDistrictPath("Kalutara", "Western", "Sri Lanka"),
+    AddressDistrictPath("Kandy", "Central", "Sri Lanka"),
+    AddressDistrictPath("Matale", "Central", "Sri Lanka"),
+    AddressDistrictPath("Nuwara Eliya", "Central", "Sri Lanka")
+)
+
+private fun addressCountryOptions(selectedLanguage: String): List<String> {
+    val locale = if (selectedLanguage == "TA") Locale("ta") else Locale.ENGLISH
+    return Locale.getISOCountries()
+        .map { countryCode ->
+            Locale("", countryCode).getDisplayCountry(locale).ifBlank {
+                Locale("", countryCode).getDisplayCountry(Locale.ENGLISH)
+            }
+        }
+        .distinct()
+        .sorted()
+}
+
+private fun normalizeCountryName(value: String): String {
+    if (value.isBlank()) return value
+    val lowered = value.trim().lowercase()
+    return Locale.getISOCountries()
+        .map { code -> Locale("", code) }
+        .firstOrNull { locale ->
+            locale.getDisplayCountry(Locale.ENGLISH).lowercase() == lowered ||
+                    locale.getDisplayCountry(Locale("ta")).lowercase() == lowered
+        }
+        ?.getDisplayCountry(Locale.ENGLISH)
+        ?: COUNTRY_OPTIONS.firstOrNull {
+            it.nameEn.equals(value, ignoreCase = true) || it.nameTa == value
+        }?.nameEn
+        ?: value
+}
+
+private fun localizeAddressCountryValue(value: String, selectedLanguage: String): String {
+    if (value.isBlank()) return value
+    val english = normalizeCountryName(value)
+    return if (selectedLanguage == "TA") {
+        Locale.getISOCountries()
+            .map { code -> Locale("", code) }
+            .firstOrNull { it.getDisplayCountry(Locale.ENGLISH).equals(english, ignoreCase = true) }
+            ?.getDisplayCountry(Locale("ta"))
+            ?.takeIf { it.isNotBlank() }
+            ?: english
+    } else {
+        english
+    }
+}
+
+private fun isIndiaCountry(country: String): Boolean =
+    normalizeCountryName(country).equals("India", ignoreCase = true)
+
+private fun sanitizePostalCodeInput(country: String, raw: String): String {
+    return if (isIndiaCountry(country)) {
+        raw.filter(Char::isDigit).take(6)
+    } else {
+        raw.uppercase()
+            .filter { it.isLetterOrDigit() || it == ' ' || it == '-' }
+            .take(12)
+    }
+}
+
+private fun postalCodeError(value: String, country: String, selectedLanguage: String): String? {
+    if (value.isBlank()) return null
+    return if (isIndiaCountry(country)) {
+        if (value.length == 6) null
+        else if (selectedLanguage == "TA") "இந்தியாவிற்கு 6 இலக்க PIN தேவை" else "India requires 6 digit PIN"
+    } else {
+        if (value.length in 3..12) null
+        else if (selectedLanguage == "TA") "செல்லுபடியாகும் Postal Code உள்ளிடவும்" else "Enter a valid postal code"
+    }
+}
+
+private fun addressStateOptions(
+    country: String,
+    selectedLanguage: String,
+    filterByCountry: Boolean
+): List<String> {
+    val englishValues = if (filterByCountry) {
+        val normalizedCountry = normalizeCountryName(country)
+        if (normalizedCountry == "India") {
+            INDIA_STATE_NAMES
+        } else {
+            OTHER_STATE_MASTER[normalizedCountry].orEmpty()
+        }
+    } else {
+        (INDIA_STATE_NAMES + OTHER_STATE_MASTER.values.flatten()).distinct().sorted()
+    }
+    return if (selectedLanguage == "TA") englishValues.map(::localizeStateValue) else englishValues
+}
+
+private fun addressDistrictPaths(
+    district: String,
+    state: String = "",
+    country: String = ""
+): List<AddressDistrictPath> {
+    val englishDistrict = deLocalizeDistrictValue(district)
+    val englishState = deLocalizeStateValue(state)
+    val englishCountry = normalizeCountryName(country)
+
+    return ADDRESS_DISTRICT_PATHS.filter { path ->
+        path.district.equals(englishDistrict, ignoreCase = true) &&
+                (englishState.isBlank() || path.state.equals(englishState, ignoreCase = true)) &&
+                (englishCountry.isBlank() || path.country.equals(englishCountry, ignoreCase = true))
+    }
+}
+
+private fun countriesForState(state: String): List<String> {
+    val englishState = deLocalizeStateValue(state)
+    val allPaths = ADDRESS_DISTRICT_PATHS.filter { it.state.equals(englishState, ignoreCase = true) }
+        .map { it.country }
+    val explicitStates = OTHER_STATE_MASTER.entries
+        .filter { (_, states) -> states.any { it.equals(englishState, ignoreCase = true) } }
+        .map { it.key }
+    val indiaMatch = if (INDIA_STATE_NAMES.any { it.equals(englishState, ignoreCase = true) }) listOf("India") else emptyList()
+    return (allPaths + explicitStates + indiaMatch).distinct()
+}
+
+private fun addressDistrictOptions(
+    country: String,
+    state: String,
+    selectedLanguage: String,
+    filterByCountry: Boolean,
+    filterByState: Boolean
+): List<String> {
+    val englishCountry = normalizeCountryName(country)
+    val englishState = deLocalizeStateValue(state)
+
+    val filtered = ADDRESS_DISTRICT_PATHS.filter { path ->
+        when {
+            filterByState -> path.state.equals(englishState, ignoreCase = true) &&
+                    (!filterByCountry || path.country.equals(englishCountry, ignoreCase = true))
+            filterByCountry -> path.country.equals(englishCountry, ignoreCase = true)
+            else -> true
+        }
+    }
+
+    val englishDistricts = filtered.map { it.district }.distinct().sorted()
+    return if (selectedLanguage == "TA") englishDistricts.map(::localizeDistrictValue) else englishDistricts
+}
+
+private fun localizeAddressStateValue(value: String, selectedLanguage: String): String {
+    if (value.isBlank()) return value
+    val english = deLocalizeStateValue(value)
+    return if (selectedLanguage == "TA") localizeStateValue(english) else english
+}
+
+private fun localizeAddressDistrictValue(value: String, selectedLanguage: String): String {
+    if (value.isBlank()) return value
+    val english = deLocalizeDistrictValue(value)
+    return if (selectedLanguage == "TA") localizeDistrictValue(english) else english
+}
+
+private fun localizeStateValue(value: String): String = when (value) {
+    "Andhra Pradesh" -> "ஆந்திரப் பிரதேசம்"
+    "Arunachal Pradesh" -> "அருணாச்சலப் பிரதேசம்"
+    "Assam" -> "அசாம்"
+    "Bihar" -> "பீகார்"
+    "Chhattisgarh" -> "சத்தீஸ்கர்"
+    "Goa" -> "கோவா"
+    "Gujarat" -> "குஜராத்"
+    "Haryana" -> "ஹரியானா"
+    "Himachal Pradesh" -> "ஹிமாச்சலப் பிரதேசம்"
+    "Jharkhand" -> "ஜார்கண்ட்"
+    "Karnataka" -> "கர்நாடகா"
+    "Kerala" -> "கேரளா"
+    "Madhya Pradesh" -> "மத்தியப் பிரதேசம்"
+    "Maharashtra" -> "மகாராஷ்டிரா"
+    "Manipur" -> "மணிப்பூர்"
+    "Meghalaya" -> "மேகாலயா"
+    "Mizoram" -> "மிசோரம்"
+    "Nagaland" -> "நாகாலாந்து"
+    "Odisha" -> "ஒடிஷா"
+    "Punjab" -> "பஞ்சாப்"
+    "Rajasthan" -> "ராஜஸ்தான்"
+    "Sikkim" -> "சிக்கிம்"
+    "Tamil Nadu" -> "தமிழ்நாடு"
+    "Telangana" -> "தெலுங்கானா"
+    "Tripura" -> "திரிபுரா"
+    "Uttar Pradesh" -> "உத்தரப் பிரதேசம்"
+    "Uttarakhand" -> "உத்தரகாண்ட்"
+    "West Bengal" -> "மேற்கு வங்காளம்"
+    "Andaman and Nicobar Islands" -> "அந்தமான் மற்றும் நிக்கோபார் தீவுகள்"
+    "Chandigarh" -> "சண்டிகர்"
+    "Dadra and Nagar Haveli and Daman and Diu" -> "தாத்ரா மற்றும் நகர் ஹவேலி மற்றும் தாமன் மற்றும் தீவு"
+    "Delhi" -> "டெல்லி"
+    "Jammu and Kashmir" -> "ஜம்மு மற்றும் காஷ்மீர்"
+    "Ladakh" -> "லடாக்"
+    "Lakshadweep" -> "லட்சத்தீவு"
+    "Puducherry" -> "புதுச்சேரி"
+    "Alabama" -> "அலபாமா"
+    "Alaska" -> "அலாஸ்கா"
+    "Arizona" -> "அரிசோனா"
+    "Arkansas" -> "ஆர்கன்சாஸ்"
+    "California" -> "காலிஃபோர்னியா"
+    "Colorado" -> "கொலராடோ"
+    "Connecticut" -> "கனெக்டிகட்"
+    "Delaware" -> "டெலாவேர்"
+    "Florida" -> "ஃப்ளோரிடா"
+    "Georgia" -> "ஜார்ஜியா"
+    "Hawaii" -> "ஹவாய்"
+    "Idaho" -> "ஐடஹோ"
+    "Illinois" -> "இல்லினாய்"
+    "Indiana" -> "இந்தியானா"
+    "Iowa" -> "அயோவா"
+    "Kansas" -> "கான்சஸ்"
+    "Kentucky" -> "கென்டக்கி"
+    "Louisiana" -> "லூயிசியானா"
+    "Maine" -> "மேயின்"
+    "Maryland" -> "மேரிலாண்ட்"
+    "Massachusetts" -> "மாசசூசெட்ஸ்"
+    "Michigan" -> "மிச்சிகன்"
+    "Minnesota" -> "மின்னசோட்டா"
+    "Mississippi" -> "மிசிசிப்பி"
+    "Missouri" -> "மிசூரி"
+    "Montana" -> "மொண்டானா"
+    "Nebraska" -> "நெப்ராஸ்கா"
+    "Nevada" -> "நெவாடா"
+    "New Hampshire" -> "நியூ ஹாம்ஷயர்"
+    "New Jersey" -> "நியூ ஜெர்சி"
+    "New Mexico" -> "நியூ மெக்ஸிகோ"
+    "New York" -> "நியூயார்க்"
+    "North Carolina" -> "வட கரோலினா"
+    "North Dakota" -> "வட டகோட்டா"
+    "Ohio" -> "ஓஹியோ"
+    "Oklahoma" -> "ஒக்லஹோமா"
+    "Oregon" -> "ஒரிகன்"
+    "Pennsylvania" -> "பென்சில்வேனியா"
+    "Rhode Island" -> "ரோட் ஐலந்து"
+    "South Carolina" -> "தென் கரோலினா"
+    "South Dakota" -> "தென் டகோட்டா"
+    "Tennessee" -> "டென்னசி"
+    "Texas" -> "டெக்சாஸ்"
+    "Utah" -> "யூட்டா"
+    "Vermont" -> "வர்மாண்ட்"
+    "Virginia" -> "விர்ஜீனியா"
+    "Washington" -> "வாஷிங்டன்"
+    "West Virginia" -> "மேற்கு விர்ஜீனியா"
+    "Wisconsin" -> "விஸ்கான்சின்"
+    "Wyoming" -> "வையோமிங்"
+    "District of Columbia" -> "கொலம்பியா மாவட்டம்"
+    "Singapore" -> "சிங்கப்பூர்"
+    "Abu Dhabi" -> "அபுதாபி"
+    "Ajman" -> "அஜ்மான்"
+    "Dubai" -> "துபாய்"
+    "Fujairah" -> "ஃபுஜைரா"
+    "Ras Al Khaimah" -> "ராஸ் அல் கைமா"
+    "Sharjah" -> "ஷார்ஜா"
+    "Umm Al Quwain" -> "உம் அல் குவைன்"
+    "Johor" -> "ஜொகூர்"
+    "Kedah" -> "கெடா"
+    "Kelantan" -> "கெலந்தான்"
+    "Kuala Lumpur" -> "கோலாலம்பூர்"
+    "Labuan" -> "லபுவான்"
+    "Malacca" -> "மலாக்கா"
+    "Negeri Sembilan" -> "நெகிரி செம்பிலான்"
+    "Pahang" -> "பஹாங்"
+    "Penang" -> "பினாங்கு"
+    "Perak" -> "பெராக்"
+    "Perlis" -> "பெர்லிஸ்"
+    "Putrajaya" -> "புத்ராஜெயா"
+    "Sabah" -> "சபா"
+    "Sarawak" -> "சரவாக்"
+    "Selangor" -> "செலாங்கூர்"
+    "Terengganu" -> "தெரெங்கானு"
+    "Central" -> "மத்திய"
+    "Eastern" -> "கிழக்கு"
+    "North Central" -> "வட மத்திய"
+    "Northern" -> "வடக்கு"
+    "North Western" -> "வடமேற்கு"
+    "Sabaragamuwa" -> "சபரகமுவா"
+    "Southern" -> "தெற்கு"
+    "Uva" -> "உவா"
+    "Western" -> "மேற்கு"
+    else -> value
+}
+
+private fun deLocalizeStateValue(value: String): String = when (value) {
+    "ஆந்திரப் பிரதேசம்" -> "Andhra Pradesh"
+    "அருணாச்சலப் பிரதேசம்" -> "Arunachal Pradesh"
+    "அசாம்" -> "Assam"
+    "பீகார்" -> "Bihar"
+    "சத்தீஸ்கர்" -> "Chhattisgarh"
+    "கோவா" -> "Goa"
+    "குஜராத்" -> "Gujarat"
+    "ஹரியானா" -> "Haryana"
+    "ஹிமாச்சலப் பிரதேசம்" -> "Himachal Pradesh"
+    "ஜார்கண்ட்" -> "Jharkhand"
+    "கர்நாடகா" -> "Karnataka"
+    "கேரளா" -> "Kerala"
+    "மத்தியப் பிரதேசம்" -> "Madhya Pradesh"
+    "மகாராஷ்டிரா" -> "Maharashtra"
+    "மணிப்பூர்" -> "Manipur"
+    "மேகாலயா" -> "Meghalaya"
+    "மிசோரம்" -> "Mizoram"
+    "நாகாலாந்து" -> "Nagaland"
+    "ஒடிஷா" -> "Odisha"
+    "பஞ்சாப்" -> "Punjab"
+    "ராஜஸ்தான்" -> "Rajasthan"
+    "சிக்கிம்" -> "Sikkim"
+    "தமிழ்நாடு" -> "Tamil Nadu"
+    "தெலுங்கானா" -> "Telangana"
+    "திரிபுரா" -> "Tripura"
+    "உத்தரப் பிரதேசம்" -> "Uttar Pradesh"
+    "உத்தரகாண்ட்" -> "Uttarakhand"
+    "மேற்கு வங்காளம்" -> "West Bengal"
+    "அந்தமான் மற்றும் நிக்கோபார் தீவுகள்" -> "Andaman and Nicobar Islands"
+    "சண்டிகர்" -> "Chandigarh"
+    "தாத்ரா மற்றும் நகர் ஹவேலி மற்றும் தாமன் மற்றும் தீவு" -> "Dadra and Nagar Haveli and Daman and Diu"
+    "டெல்லி" -> "Delhi"
+    "ஜம்மு மற்றும் காஷ்மீர்" -> "Jammu and Kashmir"
+    "லடாக்" -> "Ladakh"
+    "லட்சத்தீவு" -> "Lakshadweep"
+    "புதுச்சேரி" -> "Puducherry"
+    "காலிஃபோர்னியா" -> "California"
+    "நியூ ஜெர்சி" -> "New Jersey"
+    "நியூயார்க்" -> "New York"
+    "டெக்சாஸ்" -> "Texas"
+    "ஃப்ளோரிடா" -> "Florida"
+    "இல்லினாய்" -> "Illinois"
+    "மாசசூசெட்ஸ்" -> "Massachusetts"
+    "ஒரிகன்" -> "Oregon"
+    "சிங்கப்பூர்" -> "Singapore"
+    "அபுதாபி" -> "Abu Dhabi"
+    "அஜ்மான்" -> "Ajman"
+    "துபாய்" -> "Dubai"
+    "ஃபுஜைரா" -> "Fujairah"
+    "ராஸ் அல் கைமா" -> "Ras Al Khaimah"
+    "ஷார்ஜா" -> "Sharjah"
+    "உம் அல் குவைன்" -> "Umm Al Quwain"
+    "ஜொகூர்" -> "Johor"
+    "கோலாலம்பூர்" -> "Kuala Lumpur"
+    "பினாங்கு" -> "Penang"
+    "செலாங்கூர்" -> "Selangor"
+    "மத்திய" -> "Central"
+    "கிழக்கு" -> "Eastern"
+    "வட மத்திய" -> "North Central"
+    "வடக்கு" -> "Northern"
+    "வடமேற்கு" -> "North Western"
+    "சபரகமுவா" -> "Sabaragamuwa"
+    "தெற்கு" -> "Southern"
+    "உவா" -> "Uva"
+    "மேற்கு" -> "Western"
+    else -> value
+}
+
+private fun localizeDistrictValue(value: String): String = when (value) {
+    "Ariyalur" -> "அரியலூர்"
+    "Chengalpattu" -> "செங்கல்பட்டு"
+    "Chennai" -> "சென்னை"
+    "Coimbatore" -> "கோயம்புத்தூர்"
+    "Cuddalore" -> "கடலூர்"
+    "Dharmapuri" -> "தர்மபுரி"
+    "Dindigul" -> "திண்டுக்கல்"
+    "Erode" -> "ஈரோடு"
+    "Kallakurichi" -> "கள்ளக்குறிச்சி"
+    "Kancheepuram" -> "காஞ்சிபுரம்"
+    "Kanyakumari" -> "கன்னியாகுமரி"
+    "Karur" -> "கரூர்"
+    "Krishnagiri" -> "கிருஷ்ணகிரி"
+    "Madurai" -> "மதுரை"
+    "Mayiladuthurai" -> "மயிலாடுதுறை"
+    "Nagapattinam" -> "நாகப்பட்டினம்"
+    "Namakkal" -> "நாமக்கல்"
+    "Nilgiris" -> "நீலகிரி"
+    "Perambalur" -> "பெரம்பலூர்"
+    "Pudukkottai" -> "புதுக்கோட்டை"
+    "Ramanathapuram" -> "ராமநாதபுரம்"
+    "Ranipet" -> "ராணிப்பேட்டை"
+    "Salem" -> "சேலம்"
+    "Sivaganga" -> "சிவகங்கை"
+    "Tenkasi" -> "தென்காசி"
+    "Thanjavur" -> "தஞ்சாவூர்"
+    "Theni" -> "தேனி"
+    "Thoothukudi" -> "தூத்துக்குடி"
+    "Tiruchirappalli" -> "திருச்சிராப்பள்ளி"
+    "Tirunelveli" -> "திருநெல்வேலி"
+    "Tirupathur" -> "திருப்பத்தூர்"
+    "Tiruppur" -> "திருப்பூர்"
+    "Tiruvallur" -> "திருவள்ளூர்"
+    "Tiruvannamalai" -> "திருவண்ணாமலை"
+    "Tiruvarur" -> "திருவாரூர்"
+    "Vellore" -> "வேலூர்"
+    "Viluppuram" -> "விழுப்புரம்"
+    "Virudhunagar" -> "விருதுநகர்"
+    "Bengaluru Urban" -> "பெங்களூரு அர்பன்"
+    "Mysuru" -> "மைசூரு"
+    "Mangaluru" -> "மங்களூரு"
+    "Thiruvananthapuram" -> "திருவனந்தபுரம்"
+    "Ernakulam" -> "எറണாகுளம்"
+    "Kozhikode" -> "கொழிக்கோடு"
+    "Tirupati" -> "திருப்பதி"
+    "Nellore" -> "நெல்லூர்"
+    "Chittoor" -> "சித்தூர்"
+    "Hyderabad" -> "ஹைதராபாத்"
+    "Warangal" -> "வரங்கல்"
+    "Karimnagar" -> "கரீம்நகர்"
+    "Mumbai" -> "மும்பை"
+    "Pune" -> "புனே"
+    "Nagpur" -> "நாக்பூர்"
+    "New Delhi" -> "நியூ டெல்லி"
+    "Howrah" -> "ஹாவ்ரா"
+    "Kolkata" -> "கொல்கத்தா"
+    "Lucknow" -> "லக்னோ"
+    "Varanasi" -> "வாரணாசி"
+    "Prayagraj" -> "பிரயாக்ராஜ்"
+    "Kanpur Nagar" -> "கான்பூர் நகர்"
+    "Agra" -> "ஆக்ரா"
+    "Ahmedabad" -> "அகமதாபாத்"
+    "Surat" -> "சூரத்"
+    "Vadodara" -> "வடோதரா"
+    "Rajkot" -> "ராஜ்கோட்"
+    "Queens County" -> "க்வீன்ஸ் கவுண்டி"
+    "Los Angeles County" -> "லாஸ் ஏஞ்சல்ஸ் கவுண்டி"
+    "San Diego County" -> "சான் டியாகோ கவுண்டி"
+    "Harris County" -> "ஹாரிஸ் கவுண்டி"
+    "Dallas County" -> "டல்லஸ் கவுண்டி"
+    "Travis County" -> "ட்ராவிஸ் கவுண்டி"
+    "Petaling" -> "பெட்டாலிங்"
+    "Klang" -> "கிளாங்"
+    "Gombak" -> "கொம்பாக்"
+    "Colombo" -> "கொழும்பு"
+    "Gampaha" -> "கம்பஹா"
+    "Kalutara" -> "கலுத்துறை"
+    "Kandy" -> "கண்டி"
+    "Matale" -> "மட்டளை"
+    "Nuwara Eliya" -> "நுவரெலியா"
+    else -> value
+}
+
+private fun deLocalizeDistrictValue(value: String): String = when (value) {
+    "அரியலூர்" -> "Ariyalur"
+    "செங்கல்பட்டு" -> "Chengalpattu"
+    "சென்னை" -> "Chennai"
+    "கோயம்புத்தூர்" -> "Coimbatore"
+    "கடலூர்" -> "Cuddalore"
+    "தர்மபுரி" -> "Dharmapuri"
+    "திண்டுக்கல்" -> "Dindigul"
+    "ஈரோடு" -> "Erode"
+    "கள்ளக்குறிச்சி" -> "Kallakurichi"
+    "காஞ்சிபுரம்" -> "Kancheepuram"
+    "கன்னியாகுமரி" -> "Kanyakumari"
+    "கரூர்" -> "Karur"
+    "கிருஷ்ணகிரி" -> "Krishnagiri"
+    "மதுரை" -> "Madurai"
+    "மயிலாடுதுறை" -> "Mayiladuthurai"
+    "நாகப்பட்டினம்" -> "Nagapattinam"
+    "நாமக்கல்" -> "Namakkal"
+    "நீலகிரி" -> "Nilgiris"
+    "பெரம்பலூர்" -> "Perambalur"
+    "புதுக்கோட்டை" -> "Pudukkottai"
+    "ராமநாதபுரம்" -> "Ramanathapuram"
+    "ராணிப்பேட்டை" -> "Ranipet"
+    "சேலம்" -> "Salem"
+    "சிவகங்கை" -> "Sivaganga"
+    "தென்காசி" -> "Tenkasi"
+    "தஞ்சாவூர்" -> "Thanjavur"
+    "தேனி" -> "Theni"
+    "தூத்துக்குடி" -> "Thoothukudi"
+    "திருச்சிராப்பள்ளி" -> "Tiruchirappalli"
+    "திருநெல்வேலி" -> "Tirunelveli"
+    "திருப்பத்தூர்" -> "Tirupathur"
+    "திருப்பூர்" -> "Tiruppur"
+    "திருவள்ளூர்" -> "Tiruvallur"
+    "திருவண்ணாமலை" -> "Tiruvannamalai"
+    "திருவாரூர்" -> "Tiruvarur"
+    "வேலூர்" -> "Vellore"
+    "விழுப்புரம்" -> "Viluppuram"
+    "விருதுநகர்" -> "Virudhunagar"
+    "பெங்களூரு அர்பன்" -> "Bengaluru Urban"
+    "மைசூரு" -> "Mysuru"
+    "மங்களூரு" -> "Mangaluru"
+    "திருவனந்தபுரம்" -> "Thiruvananthapuram"
+    "எറണாகுளம்" -> "Ernakulam"
+    "கொழிக்கோடு" -> "Kozhikode"
+    "திருப்பதி" -> "Tirupati"
+    "நெல்லூர்" -> "Nellore"
+    "சித்தூர்" -> "Chittoor"
+    "ஹைதராபாத்" -> "Hyderabad"
+    "வரங்கல்" -> "Warangal"
+    "கரீம்நகர்" -> "Karimnagar"
+    "மும்பை" -> "Mumbai"
+    "புனே" -> "Pune"
+    "நாக்பூர்" -> "Nagpur"
+    "நியூ டெல்லி" -> "New Delhi"
+    "ஹாவ்ரா" -> "Howrah"
+    "கொல்கத்தா" -> "Kolkata"
+    "லக்னோ" -> "Lucknow"
+    "வாரணாசி" -> "Varanasi"
+    "பிரயாக்ராஜ்" -> "Prayagraj"
+    "கான்பூர் நகர்" -> "Kanpur Nagar"
+    "ஆக்ரா" -> "Agra"
+    "அகமதாபாத்" -> "Ahmedabad"
+    "சூரத்" -> "Surat"
+    "வடோதரா" -> "Vadodara"
+    "ராஜ்கோட்" -> "Rajkot"
+    "க்வீன்ஸ் கவுண்டி" -> "Queens County"
+    "லாஸ் ஏஞ்சல்ஸ் கவுண்டி" -> "Los Angeles County"
+    "சான் டியாகோ கவுண்டி" -> "San Diego County"
+    "ஹாரிஸ் கவுண்டி" -> "Harris County"
+    "டல்லஸ் கவுண்டி" -> "Dallas County"
+    "ட்ராவிஸ் கவுண்டி" -> "Travis County"
+    "பெட்டாலிங்" -> "Petaling"
+    "கிளாங்" -> "Klang"
+    "கொம்பாக்" -> "Gombak"
+    "கொழும்பு" -> "Colombo"
+    "கம்பஹா" -> "Gampaha"
+    "கலுத்துறை" -> "Kalutara"
+    "கண்டி" -> "Kandy"
+    "மட்டளை" -> "Matale"
+    "நுவரெலியா" -> "Nuwara Eliya"
+    else -> value
+}
+
+private const val ADDRESS_HISTORY_PREFS = "address_history_prefs"
+private const val ADDRESS_HISTORY_DISTRICT = "district"
+private const val ADDRESS_HISTORY_STATE = "state"
+private const val ADDRESS_HISTORY_COUNTRY = "country"
+
+private fun loadAddressSuggestionHistory(context: Context, key: String): List<String> {
+    return context.getSharedPreferences(ADDRESS_HISTORY_PREFS, Context.MODE_PRIVATE)
+        .getStringSet(key, emptySet())
+        .orEmpty()
+        .filter { it.isNotBlank() }
+        .sorted()
+}
+
+private fun persistAddressSuggestionHistory(context: Context, key: String, values: List<String>) {
+    context.getSharedPreferences(ADDRESS_HISTORY_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putStringSet(key, values.filter { it.isNotBlank() }.toSet())
+        .apply()
+}
+
+private fun addAddressSuggestion(target: MutableList<String>, value: String) {
+    val cleaned = value.trim()
+    if (cleaned.isBlank()) return
+    if (target.none { it.equals(cleaned, ignoreCase = true) }) {
+        target.add(cleaned)
+        target.sortBy { it.lowercase() }
+    }
+}
+
+private fun mergeAddressSuggestionOptions(builtIn: List<String>, history: List<String>): List<String> {
+    val merged = mutableListOf<String>()
+    history.filter { it.isNotBlank() }.forEach { item ->
+        if (merged.none { it.equals(item, ignoreCase = true) }) merged.add(item)
+    }
+    builtIn.filter { it.isNotBlank() }.forEach { item ->
+        if (merged.none { it.equals(item, ignoreCase = true) }) merged.add(item)
+    }
+    return merged
+}
 
 private val PHONE_LABELS = listOf(
     "Personal" to "தனிப்பட்ட",
