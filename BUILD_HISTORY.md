@@ -1,5 +1,158 @@
 # Build History
 
+## v36
+- versionCode: 36
+- versionName: 1.2.29-contact-details-edit-flow
+- buildDate: 2026-04-28
+- title: Contact Details cleanup and Edit Contact update flow
+- changed files:
+  - app/build.gradle.kts
+  - BUILD_HISTORY.md
+  - CHANGELOG.md
+  - README.md
+  - app/src/main/java/com/snuggy/templeaddressbook/data/TempleDbHelper.kt
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsRepository.kt
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsScreen.kt
+- notes:
+  - removed the duplicate top favorite star from Contact Details
+  - kept the bottom Favorite action as the single favorite control
+  - Edit now opens the Add/Edit Contact screen with existing contact values prefilled
+  - Save from Edit updates the existing contact record instead of creating a new duplicate
+  - added repository and database update methods for existing contacts
+  - no DB schema change; database remains schema 4
+- install guidance:
+  - Install over existing app
+- DB impact:
+  - No DB schema change
+  - Existing contacts are preserved
+- test focus:
+  - open Contact Details and confirm top favorite star is gone
+  - use bottom Favorite and confirm favorite state changes
+  - tap Edit and verify values are prefilled
+  - modify fields and Save
+  - confirm the same contact updates without creating a duplicate
+  - confirm Contact Details and Contacts list refresh correctly
+- regression retest:
+  - Add Contact save flow
+  - Contact Details bottom action bar
+  - hidden main bottom nav inside Contact Details
+  - Share action
+  - More menu
+  - Copy Address
+  - Open Map
+
+## v35
+- versionCode: 35
+- versionName: 1.2.28-contact-details-hide-bottom-nav
+- buildDate: 2026-04-28
+- title: Contact Details hides main bottom navigation
+- changed files:
+  - app/build.gradle.kts
+  - BUILD_HISTORY.md
+  - CHANGELOG.md
+  - README.md
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsScreen.kt
+- notes:
+  - Contact Details hides the main bottom tabs: Contacts, Groups, Messages, Donations
+  - Contact Details own bottom action bar remains visible
+  - returning back to Contacts list restores the main bottom navigation
+- install guidance:
+  - Install over existing app
+- DB impact:
+  - No DB schema change
+- test focus:
+  - Contact list shows main bottom tabs
+  - Contact Details hides main bottom tabs
+  - Contact Details bottom action bar still shows
+  - back returns to Contacts list and restores main bottom tabs
+
+## v34
+- versionCode: 34
+- versionName: 1.2.27-contact-details-bottom-actions
+- buildDate: 2026-04-28
+- title: Contact Details bottom action bar
+- changed files:
+  - app/build.gradle.kts
+  - BUILD_HISTORY.md
+  - CHANGELOG.md
+  - README.md
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt
+- notes:
+  - added Contact Details bottom action bar: Favorite, Edit, Share, More
+  - More menu includes Add to Group, Manage Tags, Add Donation Entry, Print / Share Address, Copy Address, Open Map, Duplicate Contact, Delete Contact
+  - Share, Copy Address, Print / Share Address, and Open Map actions are wired
+  - Edit button was placeholder-only in this build and is implemented in v36
+- install guidance:
+  - Install over existing app
+- DB impact:
+  - No DB schema change
+- test focus:
+  - verify bottom action bar
+  - verify Favorite, Share, More menu, Copy Address, Share Address, and Open Map
+
+## v33
+- versionCode: 33
+- versionName: 1.2.26-contact-details-layout-favorite-hotfix
+- buildDate: 2026-04-28
+- title: Contact Details layout and favorite visual hotfix
+- changed files:
+  - app/build.gradle.kts
+  - BUILD_HISTORY.md
+  - CHANGELOG.md
+  - README.md
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt
+- notes:
+  - Contact Details section cards use full available width
+  - favorite selected/unselected state visually corrected
+  - no DB schema change
+- install guidance:
+  - Install over existing app
+- DB impact:
+  - No DB schema change
+- test focus:
+  - verify Contact Details card width
+  - verify favorite selected/unselected state
+  - verify existing details still display
+
+## v32
+- versionCode: 32
+- versionName: 1.2.25-contact-details-mirror
+- buildDate: 2026-04-26
+- title: Contact Details mirrors saved Add Contact data
+- changed files:
+  - app/build.gradle.kts
+  - app/src/main/java/com/snuggy/templeaddressbook/data/TempleDbHelper.kt
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsModels.kt
+  - app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsScreen.kt
+- notes:
+  - Contact Details now displays saved Basic Info, full Address, all Phone rows, all Email rows, Notes, and map action
+  - Add Contact now passes non-relationship details into ContactDraft
+  - local database stores the newly exposed non-relationship fields
+  - safe DB schema upgrade from 3 to 4 using ADD COLUMN only
+  - relationship persistence and reciprocal logic are intentionally deferred to Patch 2
+- install guidance:
+  - Install over existing app
+- DB impact:
+  - DB schema changes from 3 to 4
+  - existing contacts are preserved
+- test focus:
+  - create a new contact with all Add Contact fields filled
+  - open Contact Details and confirm saved values are displayed
+  - test multiple phones, WhatsApp marker, multiple emails, primary markers, address, notes, and map action
+  - confirm old contacts remain after upgrade
+- regression retest:
+  - Contacts list
+  - Add Contact save flow
+  - Phone Numbers section
+  - Email Address section
+  - Address section
+  - Favorite toggle
+
+
 ## v31
 - versionCode: 31
 - versionName: 1.2.24-address-labels-map-chooser-fix

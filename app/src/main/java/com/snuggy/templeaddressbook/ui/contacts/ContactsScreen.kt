@@ -153,19 +153,53 @@ fun ContactsRoot(
             }
         )
 
+        "edit" -> {
+            val editing = contacts.firstOrNull { it.id == selectedContactId }
+            if (editing == null) {
+                LaunchedEffect(selectedContactId) { screen = "list" }
+            } else {
+                AddContactScreen(
+                    selectedLanguage = selectedLanguage,
+                    onLanguageChange = onLanguageChange,
+                    onBack = { screen = "details" },
+                    onSave = { draft ->
+                        scope.launch {
+                            repository.updateContact(editing.id, draft)
+                            refreshData()
+                            selectedContactId = editing.id
+                            screen = "details"
+                        }
+                    },
+                    editingContact = editing
+                )
+            }
+        }
+
         "details" -> {
             val selected = contacts.firstOrNull { it.id == selectedContactId }
             if (selected == null) {
                 LaunchedEffect(selectedContactId) { screen = "list" }
             } else {
+                LaunchedEffect(selected.id) {
+                    onBottomBarVisibilityChange(false)
+                }
+
                 ContactDetailsScreen(
                     contact = selected,
-                    onBack = { screen = "list" },
+                    selectedLanguage = selectedLanguage,
+                    onBack = {
+                        onBottomBarVisibilityChange(true)
+                        screen = "list"
+                    },
                     onToggleFavorite = {
                         scope.launch {
                             repository.toggleFavorite(selected.id, !selected.isFavorite)
                             refreshData()
                         }
+                    },
+                    onEdit = {
+                        onBottomBarVisibilityChange(false)
+                        screen = "edit"
                     }
                 )
             }
@@ -178,6 +212,7 @@ fun ContactsRoot(
             filterOptions = filterOptions,
             onAddContact = { screen = "add" },
             onOpenDetails = { id ->
+                onBottomBarVisibilityChange(false)
                 selectedContactId = id
                 screen = "details"
             },

@@ -1,36 +1,39 @@
-import org.gradle.api.tasks.Copy
-
-val appVersionCode = 31
-val appVersionName = "1.2.24-address-labels-map-chooser-fix"
-val appBuildDate = "2026-04-25"
+val appVersionCode = 36
+val appVersionName = "1.2.29-contact-details-edit-flow"
+val appBuildDate = "2026-04-28"
 
 val appBuildNotes = listOf(
-    "Kept District, State, and Country as textbox fields in Add Contact.",
-    "Retained the updated Address labels/placeholders already present in the latest AddContactScreen source.",
-    "Fixed only openMapChooser() so chooser behavior now follows the locked 3-use-case rule.",
-    "Map link opens chooser when present.",
-    "Address query opens chooser when map link is empty but address exists.",
-    "When both address and map link are empty, chooser still opens with a generic geo intent and no snackbar.",
-    "Phone section, Email section, and the Google Map Link field UI block were kept unchanged.",
-    "About build info updated for this build."
-).joinToString("\\n")
+    "Patch 1.4: Contact Details cleanup plus full Edit Contact update flow.",
+    "Removed duplicate top favorite star from Contact Details; bottom Favorite action remains the single favorite control.",
+    "Edit button now opens the Add/Edit Contact screen with existing saved values prefilled.",
+    "Saving from Edit updates the existing contact instead of creating a duplicate.",
+    "Added repository and SQLite update methods for existing contact records.",
+    "No DB schema change; database remains schema 4.",
+    "Tracking files updated to catch up Patch 1.1, Patch 1.2, Patch 1.3, and this Patch 1.4."
+).joinToString("\n")
 
 val appChangedFiles = listOf(
     "app/build.gradle.kts",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt",
-    "CHANGELOG.md",
     "BUILD_HISTORY.md",
-    "README.md"
-).joinToString("\\n")
+    "CHANGELOG.md",
+    "README.md",
+    "app/src/main/java/com/snuggy/templeaddressbook/data/TempleDbHelper.kt",
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt",
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt",
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsRepository.kt",
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsScreen.kt"
+).joinToString("\n")
 
 val appTestFocus = listOf(
-    "Tap map icon with map link filled -> chooser should open with the link.",
-    "Tap map icon with address filled and map link empty -> chooser should open with address query.",
-    "Tap map icon with both address and map link empty -> chooser should still open and no snackbar should appear.",
-    "Address labels/placeholders should remain as in the latest stable source.",
-    "District, State, and Country should remain textbox fields.",
-    "Phone and Email sections should remain visually and functionally unchanged."
-).joinToString("\\n")
+    "Open Contact Details and confirm the top favorite star is removed.",
+    "Confirm bottom Favorite still toggles favorite state correctly.",
+    "Open Contact Details, tap Edit, and verify saved values are prefilled.",
+    "Change Basic Info, Address, Phone, Email, Notes, Tags, Photo, and Favorite where applicable.",
+    "Save from Edit and verify the same contact is updated, not duplicated.",
+    "Return to Contact Details and Contacts list and confirm refreshed values are visible.",
+    "Confirm main bottom tabs stay hidden inside Contact Details and return on back to Contacts list.",
+    "Regression retest Add Contact save flow, Contact Details bottom action bar, Share, More menu, Copy Address, and Open Map."
+).joinToString("\n")
 
 fun buildConfigString(value: String): String = buildString {
     append("\"")

@@ -88,6 +88,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -134,7 +135,9 @@ fun AddContactScreen(
     selectedLanguage: String,
     onLanguageChange: (String) -> Unit,
     onBack: () -> Unit,
-    onSave: (ContactDraft) -> Unit
+    onSave: (ContactDraft) -> Unit,
+    relationshipContactOptions: List<String> = emptyList(),
+    editingContact: ContactRecord? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -143,27 +146,27 @@ fun AddContactScreen(
     val scrollState = rememberScrollState()
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
-    var firstName by rememberSaveable { mutableStateOf("") }
-    var lastName by rememberSaveable { mutableStateOf("") }
-    var gender by rememberSaveable { mutableStateOf("") }
-    var dobField by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
-    var rasi by rememberSaveable { mutableStateOf("") }
-    var nakshatra by rememberSaveable { mutableStateOf("") }
-    var villageTown by rememberSaveable { mutableStateOf("") }
-    var district by rememberSaveable { mutableStateOf("") }
-    var state by rememberSaveable { mutableStateOf("") }
-    var country by rememberSaveable { mutableStateOf("") }
-    var doorNo by rememberSaveable { mutableStateOf("") }
-    var buildingName by rememberSaveable { mutableStateOf("") }
-    var streetName by rememberSaveable { mutableStateOf("") }
-    var area by rememberSaveable { mutableStateOf("") }
-    var postOffice by rememberSaveable { mutableStateOf("") }
-    var taluk by rememberSaveable { mutableStateOf("") }
-    var pinCode by rememberSaveable { mutableStateOf("") }
-    var googleMapLink by rememberSaveable { mutableStateOf("") }
-    var notes by rememberSaveable { mutableStateOf("") }
-    var isFavorite by rememberSaveable { mutableStateOf(false) }
-    var photoSpec by rememberSaveable { mutableStateOf<String?>(null) }
+    var firstName by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.firstName.orEmpty()) }
+    var lastName by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.lastName.orEmpty()) }
+    var gender by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.gender.orEmpty()) }
+    var dobField by rememberSaveable(editingContact?.id, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(editingContact?.dob.orEmpty())) }
+    var rasi by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.rasi.orEmpty()) }
+    var nakshatra by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.nakshatra.orEmpty()) }
+    var villageTown by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.villageTown.orEmpty()) }
+    var district by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.district.orEmpty()) }
+    var state by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.state.orEmpty()) }
+    var country by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.country.orEmpty()) }
+    var doorNo by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.doorNo.orEmpty()) }
+    var buildingName by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.buildingName.orEmpty()) }
+    var streetName by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.streetName.orEmpty()) }
+    var area by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.area.orEmpty()) }
+    var postOffice by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.postOffice.orEmpty()) }
+    var taluk by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.taluk.orEmpty()) }
+    var pinCode by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.pinCode.orEmpty()) }
+    var googleMapLink by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.googleMapLink.orEmpty()) }
+    var notes by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.notes.orEmpty()) }
+    var isFavorite by rememberSaveable(editingContact?.id) { mutableStateOf(editingContact?.isFavorite ?: false) }
+    var photoSpec by rememberSaveable(editingContact?.id) { mutableStateOf<String?>(editingContact?.photoUri) }
     var activeSection by rememberSaveable { mutableStateOf<AddSection?>(AddSection.BASIC_INFO) }
     var saveAttempted by rememberSaveable { mutableStateOf(false) }
     var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
@@ -171,9 +174,10 @@ fun AddContactScreen(
     var pendingPhotoSource by rememberSaveable { mutableStateOf<String?>(null) }
     var showPhotoAdjustDialog by rememberSaveable { mutableStateOf(false) }
 
-    var photoScale by rememberSaveable { mutableStateOf(1f) }
-    var photoOffsetX by rememberSaveable { mutableStateOf(0f) }
-    var photoOffsetY by rememberSaveable { mutableStateOf(0f) }
+    val initialPhotoSpec = remember(editingContact?.id) { decodePhotoSpec(editingContact?.photoUri) }
+    var photoScale by rememberSaveable(editingContact?.id) { mutableStateOf(initialPhotoSpec?.scale ?: 1f) }
+    var photoOffsetX by rememberSaveable(editingContact?.id) { mutableStateOf(initialPhotoSpec?.offsetX ?: 0f) }
+    var photoOffsetY by rememberSaveable(editingContact?.id) { mutableStateOf(initialPhotoSpec?.offsetY ?: 0f) }
 
     var rasiExpanded by rememberSaveable { mutableStateOf(false) }
     var nakshatraExpanded by rememberSaveable { mutableStateOf(false) }
@@ -189,20 +193,50 @@ fun AddContactScreen(
     var addressStatePinned by rememberSaveable { mutableStateOf(false) }
     var addressCountryPinned by rememberSaveable { mutableStateOf(false) }
 
-    val phoneRows = remember {
-        mutableStateListOf(
-            PhoneRowInput(
-                country = COUNTRY_OPTIONS.first(),
-                localNumber = "",
-                label = phoneLabels(selectedLanguage).first(),
-                isPrimary = true,
-                isWhatsApp = false
+    val phoneRows = remember(editingContact?.id) {
+        val existingPhones = editingContact?.phonesForDisplay.orEmpty()
+            .filter { it.displayNumber.isNotBlank() || it.localNumber.isNotBlank() }
+        val initialRows = if (existingPhones.isNotEmpty()) {
+            existingPhones.mapIndexed { index, phone ->
+                val savedCountry = countryOptionForSavedPhone(phone)
+                PhoneRowInput(
+                    country = savedCountry,
+                    localNumber = phone.localNumber.ifBlank { localNumberFromDisplayNumber(phone.displayNumber, savedCountry.code) },
+                    label = localizePhoneLabel(phone.label, selectedLanguage).ifBlank { phoneLabels(selectedLanguage).first() },
+                    isPrimary = phone.isPrimary || (index == 0 && existingPhones.none { it.isPrimary }),
+                    isWhatsApp = phone.isWhatsApp
+                )
+            }
+        } else {
+            listOf(
+                PhoneRowInput(
+                    country = COUNTRY_OPTIONS.first(),
+                    localNumber = "",
+                    label = phoneLabels(selectedLanguage).first(),
+                    isPrimary = true,
+                    isWhatsApp = false
+                )
             )
-        )
+        }
+        mutableStateListOf<PhoneRowInput>().apply { addAll(initialRows) }
     }
-    val emailRows = remember { mutableStateListOf(EmailRowInput(isPrimary = true, label = emailLabels(selectedLanguage).first())) }
-    val relationshipRows = remember { mutableStateListOf(RelationshipRowInput()) }
-    val selectedTags = remember { mutableStateListOf<String>() }
+    val emailRows = remember(editingContact?.id) {
+        val existingEmails = editingContact?.emailsForDisplay.orEmpty()
+        val initialRows = if (existingEmails.isNotEmpty()) {
+            existingEmails.mapIndexed { index, email ->
+                EmailRowInput(
+                    email = email.email,
+                    label = localizeEmailLabel(email.label, selectedLanguage).ifBlank { emailLabels(selectedLanguage).first() },
+                    isPrimary = email.isPrimary || (index == 0 && existingEmails.none { it.isPrimary })
+                )
+            }
+        } else {
+            listOf(EmailRowInput(isPrimary = true, label = emailLabels(selectedLanguage).first()))
+        }
+        mutableStateListOf<EmailRowInput>().apply { addAll(initialRows) }
+    }
+    val relationshipRows = remember { mutableStateListOf<RelationshipRowInput>() }
+    val selectedTags = remember(editingContact?.id) { mutableStateListOf<String>().apply { addAll(editingContact?.tags.orEmpty()) } }
     var tagSearch by rememberSaveable { mutableStateOf("") }
 
     val quickTags = remember(selectedLanguage) {
@@ -216,6 +250,23 @@ fun AddContactScreen(
     val addressStateHistory = remember { mutableStateListOf<String>().apply { addAll(loadAddressSuggestionHistory(context, ADDRESS_HISTORY_STATE)) } }
     val addressCountryHistory = remember { mutableStateListOf<String>().apply { addAll(loadAddressSuggestionHistory(context, ADDRESS_HISTORY_COUNTRY)) } }
 
+    var loadedRelationshipContactOptions by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        loadedRelationshipContactOptions = ContactsRepository(context)
+            .getContacts()
+            .map { it.fullName.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .sortedBy { it.lowercase() }
+    }
+    val relationshipContactSuggestions = remember(relationshipContactOptions, loadedRelationshipContactOptions) {
+        val source = if (relationshipContactOptions.isNotEmpty()) relationshipContactOptions else loadedRelationshipContactOptions
+        source
+            .map { displayNameOnly(it) }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .sortedBy { it.lowercase() }
+    }
 
     LaunchedEffect(selectedLanguage) {
         gender = localizeGenderValue(gender, selectedLanguage)
@@ -464,8 +515,47 @@ fun AddContactScreen(
             val firstIndex = filledEmailIndexes.first()
             emailRows.indices.forEach { i -> emailRows[i] = emailRows[i].copy(isPrimary = i == firstIndex) }
         }
-        val primaryPhoneRow = phoneRows.firstOrNull { it.localNumber.isNotBlank() && it.isPrimary }
-            ?: phoneRows.firstOrNull { it.localNumber.isNotBlank() }
+        val blankRelationshipIndexes = relationshipRows.mapIndexedNotNull { index, row ->
+            if (isBlankRelationshipRow(row)) index else null
+        }
+        blankRelationshipIndexes.asReversed().forEach { index -> relationshipRows.removeAt(index) }
+        val invalidRelationshipRow = relationshipRows.firstOrNull { !isValidRelationshipRow(it) }
+        if (invalidRelationshipRow != null) {
+            activeSection = AddSection.RELATIONSHIPS
+            scope.launch {
+                snackbarHostState.showSnackbar(relationshipValidationMessage(invalidRelationshipRow, selectedLanguage))
+            }
+            return
+        }
+        val primaryPhoneIndex = phoneRows.indexOfFirst { it.localNumber.isNotBlank() && it.isPrimary }
+            .takeIf { it >= 0 }
+            ?: phoneRows.indexOfFirst { it.localNumber.isNotBlank() }
+        val primaryPhoneRow = phoneRows.getOrNull(primaryPhoneIndex)
+        val savedPhoneRows = phoneRows
+            .mapIndexedNotNull { index, row ->
+                if (row.localNumber.isBlank()) return@mapIndexedNotNull null
+                val localNumber = row.localNumber.trim()
+                ContactPhoneRecord(
+                    countryName = row.country.nameEn,
+                    countryCode = row.country.code,
+                    countryFlag = row.country.flag,
+                    countryCompactLabel = row.country.compactLabel,
+                    localNumber = localNumber,
+                    fullNumber = "${row.country.code} $localNumber",
+                    label = row.label.trim(),
+                    isPrimary = index == primaryPhoneIndex,
+                    isWhatsApp = row.isWhatsApp
+                )
+            }
+        val savedEmailRows = emailRows
+            .filter { it.email.isNotBlank() }
+            .map { row ->
+                ContactEmailRecord(
+                    email = row.email.trim(),
+                    label = row.label.trim(),
+                    isPrimary = row.isPrimary
+                )
+            }
         val fullPhone = primaryPhoneRow?.let { "${it.country.code} ${it.localNumber.trim()}" } ?: ""
         persistAddressSuggestions()
         onSave(
@@ -480,7 +570,22 @@ fun AddContactScreen(
                 country = country.trim(),
                 tags = selectedTags.toList(),
                 isFavorite = isFavorite,
-                photoUri = photoSpec
+                photoUri = photoSpec,
+                gender = gender.trim(),
+                dob = dobField.text.trim(),
+                rasi = rasi.trim(),
+                nakshatra = nakshatra.trim(),
+                doorNo = doorNo.trim(),
+                buildingName = buildingName.trim(),
+                streetName = streetName.trim(),
+                area = area.trim(),
+                postOffice = postOffice.trim(),
+                taluk = taluk.trim(),
+                pinCode = pinCode.trim(),
+                googleMapLink = googleMapLink.trim(),
+                notes = notes.trim(),
+                phoneNumbers = savedPhoneRows,
+                emailAddresses = savedEmailRows
             )
         )
     }
@@ -568,6 +673,7 @@ fun AddContactScreen(
     ) {
         AddContactHeader(
             selectedLanguage = selectedLanguage,
+            isEditMode = editingContact != null,
             onLanguageChange = onLanguageChange,
             onBack = { handleBack() },
             saveEnabledHighlight = canHighlightSave,
@@ -888,20 +994,33 @@ fun AddContactScreen(
                         activeSection = if (activeSection == AddSection.RELATIONSHIPS) null else AddSection.RELATIONSHIPS
                     }
                 ) {
-                    relationshipRows.forEachIndexed { index, row ->
-                        RelationshipRowEditor(
-                            selectedLanguage = selectedLanguage,
-                            row = row,
-                            relationshipOptions = relationshipOptions(selectedLanguage),
-                            onUpdate = { updated -> relationshipRows[index] = updated },
-                            onDelete = { if (relationshipRows.size > 1) relationshipRows.removeAt(index) }
-                        )
+                    if (relationshipRows.isNotEmpty()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            color = SearchBg,
+                            border = BorderStroke(1.dp, CardBorder)
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)) {
+                                relationshipRows.forEachIndexed { index, row ->
+                                    RelationshipRowEditor(
+                                        selectedLanguage = selectedLanguage,
+                                        row = row,
+                                        relationshipOptions = relationshipOptions(selectedLanguage),
+                                        contactOptions = relationshipContactSuggestions,
+                                        onUpdate = { updated -> relationshipRows[index] = updated },
+                                        onDelete = { relationshipRows.removeAt(index) },
+                                        showDivider = index != relationshipRows.lastIndex
+                                    )
+                                }
+                            }
+                        }
                     }
+
                     AddInlineAction(label = localizedLabel("+ Add Relationship", "+ உறவை சேர்க்க")) {
                         relationshipRows.add(RelationshipRowInput())
                     }
                 }
-
                 SectionCard(
                     title = localizedLabel("Notes", "குறிப்புகள்"),
                     expanded = activeSection == AddSection.NOTES,
@@ -993,6 +1112,7 @@ fun AddContactScreen(
 @Composable
 private fun AddContactHeader(
     selectedLanguage: String,
+    isEditMode: Boolean,
     onLanguageChange: (String) -> Unit,
     onBack: () -> Unit,
     saveEnabledHighlight: Boolean,
@@ -1014,7 +1134,12 @@ private fun AddContactHeader(
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
             Text(
-                text = if (selectedLanguage == "TA") "தொடர்பை சேர்க்க" else "Add Contact",
+                text = when {
+                    isEditMode && selectedLanguage == "TA" -> "தொடர்பை திருத்து"
+                    isEditMode -> "Edit Contact"
+                    selectedLanguage == "TA" -> "தொடர்பை சேர்க்க"
+                    else -> "Add Contact"
+                },
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
@@ -2356,44 +2481,201 @@ private fun EmailInlineField(
 }
 
 @Composable
-private fun RelationshipRowEditor(
-    selectedLanguage: String,
-    row: RelationshipRowInput,
-    relationshipOptions: List<String>,
-    onUpdate: (RelationshipRowInput) -> Unit,
-    onDelete: () -> Unit
+private fun SearchableRelatedContactField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    options: List<String>,
+    placeholder: String,
+    noResultsText: String,
+    clearContentDescription: String,
+    modifier: Modifier = Modifier
 ) {
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = SearchBg,
-        border = BorderStroke(1.dp, CardBorder)
-    ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LabeledCompactField(
-                label = if (selectedLanguage == "TA") "தொடர்பு பெயர்" else "Related Contact",
-                value = row.relatedContact,
-                onValueChange = { onUpdate(row.copy(relatedContact = it)) },
-                placeholder = if (selectedLanguage == "TA") "பிறகு இருக்கும் தொடர்பை தேர்வு செய்யலாம்" else "Select existing contact later"
-            )
-            SmallSelectionField(
-                label = if (selectedLanguage == "TA") "உறவு வகை" else "Relationship Type",
-                value = row.type,
-                options = relationshipOptions,
-                onSelected = { onUpdate(row.copy(type = it)) }
-            )
-            LabeledCompactField(
-                label = if (selectedLanguage == "TA") "உறவு பெயர்" else "Relationship Name",
-                value = row.relatedName,
-                onValueChange = { onUpdate(row.copy(relatedName = it)) },
-                placeholder = if (selectedLanguage == "TA") "தொடர்புகளில் இல்லாவிட்டால் பயன்படுத்தவும்" else "Use if person is not yet in contacts"
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDelete) { Text(if (selectedLanguage == "TA") "நீக்கு" else "Delete", color = MutedText) }
+    var expanded by remember { mutableStateOf(false) }
+    val filteredOptions = remember(value, options) {
+        val query = value.trim()
+        if (query.isBlank()) {
+            options
+        } else {
+            options.filter { it.contains(query, ignoreCase = true) }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        LabeledCompactField(
+            label = label,
+            value = value,
+            onValueChange = { text ->
+                onValueChange(text)
+                expanded = true
+            },
+            placeholder = placeholder,
+            capitalization = KeyboardCapitalization.Words,
+            trailing = {
+                if (value.isNotBlank()) {
+                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable {
+                                    onValueChange("")
+                                    expanded = false
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = clearContentDescription,
+                                tint = MutedText,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            onClick = { expanded = true }
+        )
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.heightIn(max = 300.dp),
+            properties = PopupProperties(focusable = false)
+        ) {
+            if (filteredOptions.isEmpty()) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = noResultsText,
+                            color = MutedText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    onClick = {},
+                    enabled = false,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                )
+            } else {
+                filteredOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
+                            )
+                        },
+                        onClick = {
+                            onValueChange(option)
+                            expanded = false
+                        },
+                        trailingIcon = if (option == value) {
+                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
     }
 }
 
+@Composable
+private fun RelationshipRowEditor(
+    selectedLanguage: String,
+    row: RelationshipRowInput,
+    relationshipOptions: List<String>,
+    contactOptions: List<String>,
+    onUpdate: (RelationshipRowInput) -> Unit,
+    onDelete: () -> Unit,
+    showDivider: Boolean
+) {
+    val typeLabel = if (selectedLanguage == "TA") "உறவு வகை" else "Relationship Type"
+    val relatedContactLabel = if (selectedLanguage == "TA") "தொடர்பில் உள்ளவர்" else "Related Contact"
+    val referenceNameLabel = if (selectedLanguage == "TA") "குறிப்பு பெயர்" else "Reference Contact Name"
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = typeLabel,
+                color = Color(0xFF333333),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp,
+                maxLines = 1,
+                modifier = Modifier.defaultMinSize(minWidth = 74.dp)
+            )
+            CompactSelectionPicker(
+                title = typeLabel,
+                value = row.type,
+                options = relationshipOptions,
+                modifier = Modifier.wrapContentWidth().widthIn(max = 190.dp),
+                onSelected = { selected ->
+                    onUpdate(row.copy(type = localizeRelationshipValue(selected, selectedLanguage)))
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            SearchableRelatedContactField(
+                label = relatedContactLabel,
+                value = row.relatedContact,
+                onValueChange = { onUpdate(row.copy(relatedContact = it)) },
+                options = contactOptions,
+                placeholder = if (selectedLanguage == "TA") "சேமித்த தொடர்பை தேடுக" else "Search existing contact",
+                noResultsText = if (selectedLanguage == "TA") "பொருந்தும் தொடர்புகள் இல்லை" else "No matching contacts",
+                clearContentDescription = if (selectedLanguage == "TA") "தொடர்பை அழி" else "Clear contact",
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 1.dp)
+                    .height(44.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                DeleteIconButton(onClick = onDelete)
+            }
+        }
+
+        LabeledCompactField(
+            label = referenceNameLabel,
+            value = row.relatedName,
+            onValueChange = { onUpdate(row.copy(relatedName = it)) },
+            placeholder = if (selectedLanguage == "TA") {
+                "சேமிக்கப்படாத நபரின் பெயர்"
+            } else {
+                "Name if contact is not saved"
+            },
+            capitalization = KeyboardCapitalization.Words
+        )
+
+        if (showDivider) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 3.dp)
+                    .height(1.dp)
+                    .background(CardBorder.copy(alpha = 0.75f))
+            )
+        }
+    }
+}
 @Composable
 private fun SmallSelectionField(label: String, value: String, options: List<String>, onSelected: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
@@ -2449,6 +2731,17 @@ private fun SmallSelectionField(label: String, value: String, options: List<Stri
             }
         }
     }
+}
+
+
+private fun displayNameOnly(value: String): String {
+    val cleaned = value.trim()
+    if (cleaned.isBlank()) return cleaned
+    return cleaned
+        .substringBefore("•")
+        .substringBefore("|")
+        .substringBefore(" - ")
+        .trim()
 }
 
 private fun localizedSelectionPlaceholder(label: String): String = when (label) {
@@ -2790,12 +3083,62 @@ private fun localizeNakshatraValue(value: String, selectedLanguage: String): Str
 private fun localizeRelationshipValue(value: String, selectedLanguage: String): String =
     localizeMappedValue(value, selectedLanguage, RELATIONSHIP_LABELS)
 
+private fun countryOptionForSavedPhone(phone: ContactPhoneRecord): CountryOption {
+    val trimmedNumber = phone.displayNumber.trim()
+    return COUNTRY_OPTIONS.firstOrNull { option ->
+        option.code == phone.countryCode && (phone.countryCompactLabel.isBlank() || option.compactLabel == phone.countryCompactLabel)
+    } ?: COUNTRY_OPTIONS.firstOrNull { option ->
+        option.code == phone.countryCode && option.nameEn.equals(phone.countryName, ignoreCase = true)
+    } ?: COUNTRY_OPTIONS.firstOrNull { option ->
+        option.code == phone.countryCode
+    } ?: COUNTRY_OPTIONS
+        .sortedByDescending { it.code.length }
+        .firstOrNull { option -> trimmedNumber.startsWith(option.code) }
+    ?: COUNTRY_OPTIONS.firstOrNull { option ->
+        option.nameEn.equals(phone.countryName, ignoreCase = true) || option.compactLabel.equals(phone.countryCompactLabel, ignoreCase = true)
+    } ?: COUNTRY_OPTIONS.first()
+}
+
+private fun localNumberFromDisplayNumber(displayNumber: String, countryCode: String): String {
+    val trimmed = displayNumber.trim()
+    return when {
+        trimmed.isBlank() -> ""
+        countryCode.isNotBlank() && trimmed.startsWith(countryCode) -> trimmed.removePrefix(countryCode).trim()
+        else -> trimmed
+    }
+}
+
 private fun localizeMappedValue(value: String, selectedLanguage: String, mapping: List<Pair<String, String>>): String {
     if (value.isBlank()) return value
     val match = mapping.firstOrNull { it.first == value || it.second == value } ?: return value
     return if (selectedLanguage == "TA") match.second else match.first
 }
 
+private fun isBlankRelationshipRow(row: RelationshipRowInput): Boolean =
+    row.type.isBlank() && row.relatedContact.isBlank() && row.relatedName.isBlank()
+
+private fun isValidRelationshipRow(row: RelationshipRowInput): Boolean {
+    if (isBlankRelationshipRow(row)) return true
+    val hasType = row.type.isNotBlank()
+    val hasContactOrName = row.relatedContact.isNotBlank() || row.relatedName.isNotBlank()
+    return hasType && hasContactOrName
+}
+
+private fun relationshipValidationMessage(row: RelationshipRowInput, selectedLanguage: String): String {
+    val hasType = row.type.isNotBlank()
+    val hasContactOrName = row.relatedContact.isNotBlank() || row.relatedName.isNotBlank()
+    return when {
+        !hasType && hasContactOrName -> {
+            if (selectedLanguage == "TA") "உறவு வகையை தேர்வு செய்யவும்" else "Select relationship type"
+        }
+        hasType && !hasContactOrName -> {
+            if (selectedLanguage == "TA") "தொடர்பை தேர்வு செய்யவும் அல்லது பெயரை உள்ளிடவும்" else "Select contact or enter reference name"
+        }
+        else -> {
+            if (selectedLanguage == "TA") "உறவு விவரத்தை சரிபார்க்கவும்" else "Check relationship details"
+        }
+    }
+}
 private data class AddressFieldText(
     val label: String,
     val placeholder: String
@@ -3826,18 +4169,49 @@ private val NAKSHATRA_LABELS = listOf(
 )
 
 private val RELATIONSHIP_LABELS = listOf(
-    "Father" to "அப்பா", "Mother" to "அம்மா", "Son" to "மகன்", "Daughter" to "மகள்", "Husband" to "கணவர்",
-    "Wife" to "மனைவி", "Elder Brother" to "அண்ணன்", "Younger Brother" to "தம்பி", "Elder Sister" to "அக்கா",
-    "Younger Sister" to "தங்கை", "Grandfather" to "தாத்தா", "Grandmother" to "பாட்டி", "Grandson" to "பேரன்",
-    "Granddaughter" to "பேத்தி", "Uncle" to "மாமா", "Aunt" to "அத்தை", "Chithappa" to "சித்தப்பா",
-    "Chithi" to "சித்தி", "Periyappa" to "பெரியப்பா", "Periyamma" to "பெரியம்மா", "Son-in-law" to "மருமகன்",
-    "Daughter-in-law" to "மருமகள்", "Father-in-law" to "மாமனார்", "Mother-in-law" to "மாமியார்",
-    "Brother-in-law" to "மைத்துனன்", "Sister-in-law" to "மைத்துனி", "Relative" to "உறவினர்",
-    "Family Friend" to "குடும்ப நண்பர்", "Driver" to "டிரைவர்", "Watchman" to "வாட்ச்மேன்",
-    "House Maid" to "ஹவுஸ் மேய்ட்", "Cook" to "குக்", "Gardener" to "கார்டனர்", "Caretaker" to "கேர் டேக்கர்",
+    "Husband" to "கணவர்",
+    "Wife" to "மனைவி",
+    "Son" to "மகன்",
+    "Daughter" to "மகள்",
+    "Father" to "அப்பா",
+    "Mother" to "அம்மா",
+    "Brother" to "சகோதரர்",
+    "Sister" to "சகோதரி",
+    "Elder Brother" to "அண்ணன்",
+    "Younger Brother" to "தம்பி",
+    "Elder Sister" to "அக்கா",
+    "Younger Sister" to "தங்கை",
+    "Grandfather" to "தாத்தா",
+    "Grandmother" to "பாட்டி",
+    "Grandson" to "பேரன்",
+    "Granddaughter" to "பேத்தி",
+    "Uncle" to "மாமா",
+    "Aunt" to "அத்தை",
+    "Chithappa" to "சித்தப்பா",
+    "Chithi" to "சித்தி",
+    "Periyappa" to "பெரியப்பா",
+    "Periyamma" to "பெரியம்மா",
+    "Father-in-law" to "மாமனார்",
+    "Mother-in-law" to "மாமியார்",
+    "Son-in-law" to "மருமகன்",
+    "Daughter-in-law" to "மருமகள்",
+    "Brother-in-law" to "மைத்துனன்",
+    "Sister-in-law" to "மைத்துனி",
+    "Relative" to "உறவினர்",
+    "PA" to "பி.ஏ",
+    "Manager" to "மேனேஜர்",
+    "Watchman" to "வாட்ச்மேன்",
+    "Security" to "செக்யூரிட்டி",
+    "House Maid" to "ஹவுஸ் மேய்ட்",
+    "Driver" to "டிரைவர்",
+    "Cook" to "குக்",
+    "Gardener" to "தோட்டக்காரர்",
+    "Caretaker" to "கேர் டேக்கர்",
+    "Neighbor" to "பக்கத்து வீட்டுக்காரர்",
+    "Friend" to "நண்பர்",
+    "Family Friend" to "குடும்ப நண்பர்",
     "Other" to "மற்றவை"
 )
-
 private fun phoneLabels(selectedLanguage: String): List<String> =
     PHONE_LABELS.map { if (selectedLanguage == "TA") it.second else it.first }
 

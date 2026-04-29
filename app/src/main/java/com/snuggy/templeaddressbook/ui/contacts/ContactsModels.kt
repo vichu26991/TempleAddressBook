@@ -13,6 +13,32 @@ import java.io.ByteArrayInputStream
 import java.io.File
 
 @Immutable
+data class ContactPhoneRecord(
+    val countryName: String = "",
+    val countryCode: String = "",
+    val countryFlag: String = "",
+    val countryCompactLabel: String = "",
+    val localNumber: String = "",
+    val fullNumber: String = "",
+    val label: String = "",
+    val isPrimary: Boolean = false,
+    val isWhatsApp: Boolean = false
+) {
+    val displayNumber: String = fullNumber.ifBlank {
+        listOf(countryCode.trim(), localNumber.trim())
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+    }
+}
+
+@Immutable
+data class ContactEmailRecord(
+    val email: String = "",
+    val label: String = "",
+    val isPrimary: Boolean = false
+)
+
+@Immutable
 data class ContactRecord(
     val id: Long,
     val firstName: String,
@@ -25,7 +51,22 @@ data class ContactRecord(
     val country: String,
     val tags: List<String>,
     val isFavorite: Boolean,
-    val photoUri: String? = null
+    val photoUri: String? = null,
+    val gender: String = "",
+    val dob: String = "",
+    val rasi: String = "",
+    val nakshatra: String = "",
+    val doorNo: String = "",
+    val buildingName: String = "",
+    val streetName: String = "",
+    val area: String = "",
+    val postOffice: String = "",
+    val taluk: String = "",
+    val pinCode: String = "",
+    val googleMapLink: String = "",
+    val notes: String = "",
+    val phoneNumbers: List<ContactPhoneRecord> = emptyList(),
+    val emailAddresses: List<ContactEmailRecord> = emptyList()
 ) {
     val fullName: String = listOf(firstName.trim(), lastName.trim())
         .filter { it.isNotBlank() }
@@ -46,6 +87,44 @@ data class ContactRecord(
                 else -> "${parts.first().first()}${parts.last().first()}".uppercase()
             }
         }
+
+    val phonesForDisplay: List<ContactPhoneRecord> = phoneNumbers.ifEmpty {
+        if (primaryPhone.isBlank()) emptyList() else listOf(
+            ContactPhoneRecord(
+                fullNumber = primaryPhone,
+                label = phoneLabel,
+                isPrimary = true,
+                isWhatsApp = false
+            )
+        )
+    }
+
+    val primaryPhoneForDisplay: ContactPhoneRecord? = phonesForDisplay.firstOrNull { it.isPrimary }
+        ?: phonesForDisplay.firstOrNull()
+
+    val whatsAppPhoneForDisplay: ContactPhoneRecord? = phonesForDisplay.firstOrNull { it.isWhatsApp }
+        ?: primaryPhoneForDisplay
+
+    val emailsForDisplay: List<ContactEmailRecord> = emailAddresses.filter { it.email.isNotBlank() }
+
+    val primaryEmailForDisplay: ContactEmailRecord? = emailsForDisplay.firstOrNull { it.isPrimary }
+        ?: emailsForDisplay.firstOrNull()
+
+    val fullPostalAddress: String = listOf(
+        doorNo,
+        buildingName,
+        streetName,
+        area,
+        postOffice,
+        taluk,
+        villageTown,
+        district,
+        state,
+        pinCode,
+        country
+    ).map { it.trim() }
+        .filter { it.isNotBlank() }
+        .joinToString(", ")
 }
 
 data class ContactDraft(
@@ -59,7 +138,22 @@ data class ContactDraft(
     val country: String,
     val tags: List<String>,
     val isFavorite: Boolean,
-    val photoUri: String? = null
+    val photoUri: String? = null,
+    val gender: String = "",
+    val dob: String = "",
+    val rasi: String = "",
+    val nakshatra: String = "",
+    val doorNo: String = "",
+    val buildingName: String = "",
+    val streetName: String = "",
+    val area: String = "",
+    val postOffice: String = "",
+    val taluk: String = "",
+    val pinCode: String = "",
+    val googleMapLink: String = "",
+    val notes: String = "",
+    val phoneNumbers: List<ContactPhoneRecord> = emptyList(),
+    val emailAddresses: List<ContactEmailRecord> = emptyList()
 )
 
 data class ContactFilterOptions(
@@ -126,8 +220,6 @@ fun decodePhotoSpec(raw: String?): PhotoRenderSpec? {
         PhotoRenderSpec(source = raw)
     }
 }
-
-
 
 fun normalizedPhotoOffset(value: Float): Float = if (kotlin.math.abs(value) > 3f) value / 220f else value
 

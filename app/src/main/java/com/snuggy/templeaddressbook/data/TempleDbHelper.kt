@@ -6,9 +6,13 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.snuggy.templeaddressbook.ui.contacts.AppliedContactFilters
 import com.snuggy.templeaddressbook.ui.contacts.ContactDraft
+import com.snuggy.templeaddressbook.ui.contacts.ContactEmailRecord
+import com.snuggy.templeaddressbook.ui.contacts.ContactPhoneRecord
 import com.snuggy.templeaddressbook.ui.contacts.ContactFilterOptions
 import com.snuggy.templeaddressbook.ui.contacts.ContactRecord
 import com.snuggy.templeaddressbook.ui.contacts.SmartGroupRecord
+import org.json.JSONArray
+import org.json.JSONObject
 
 class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
 
@@ -28,6 +32,21 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
                 tags TEXT NOT NULL,
                 is_favorite INTEGER NOT NULL DEFAULT 0,
                 photo_uri TEXT,
+                gender TEXT NOT NULL DEFAULT '',
+                dob TEXT NOT NULL DEFAULT '',
+                rasi TEXT NOT NULL DEFAULT '',
+                nakshatra TEXT NOT NULL DEFAULT '',
+                door_no TEXT NOT NULL DEFAULT '',
+                building_name TEXT NOT NULL DEFAULT '',
+                street_name TEXT NOT NULL DEFAULT '',
+                area TEXT NOT NULL DEFAULT '',
+                post_office TEXT NOT NULL DEFAULT '',
+                taluk TEXT NOT NULL DEFAULT '',
+                pin_code TEXT NOT NULL DEFAULT '',
+                google_map_link TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                phones_data TEXT NOT NULL DEFAULT '',
+                emails_data TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL
             )
             """.trimIndent()
@@ -52,9 +71,39 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_CONTACTS")
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_SMART_GROUPS")
-        onCreate(db)
+        if (oldVersion < 4) {
+            addColumnIfMissing(db, TABLE_CONTACTS, "gender", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "dob", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "rasi", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "nakshatra", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "door_no", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "building_name", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "street_name", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "area", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "post_office", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "taluk", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "pin_code", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "google_map_link", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "notes", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "phones_data", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, TABLE_CONTACTS, "emails_data", "TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    private fun addColumnIfMissing(db: SQLiteDatabase, tableName: String, columnName: String, columnDefinition: String) {
+        val exists = db.rawQuery("PRAGMA table_info($tableName)", null).use { cursor ->
+            var found = false
+            while (cursor.moveToNext()) {
+                if (cursor.getString(cursor.getColumnIndexOrThrow("name")) == columnName) {
+                    found = true
+                    break
+                }
+            }
+            found
+        }
+        if (!exists) {
+            db.execSQL("ALTER TABLE $tableName ADD COLUMN $columnName $columnDefinition")
+        }
     }
 
     fun getContacts(): List<ContactRecord> {
@@ -81,7 +130,22 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
                     country = cursor.getString(cursor.getColumnIndexOrThrow("country_name")),
                     tags = splitTags(cursor.getString(cursor.getColumnIndexOrThrow("tags"))),
                     isFavorite = cursor.getInt(cursor.getColumnIndexOrThrow("is_favorite")) == 1,
-                    photoUri = cursor.getString(cursor.getColumnIndexOrThrow("photo_uri"))
+                    photoUri = cursor.getStringOrNullSafe("photo_uri"),
+                    gender = cursor.getStringOrEmpty("gender"),
+                    dob = cursor.getStringOrEmpty("dob"),
+                    rasi = cursor.getStringOrEmpty("rasi"),
+                    nakshatra = cursor.getStringOrEmpty("nakshatra"),
+                    doorNo = cursor.getStringOrEmpty("door_no"),
+                    buildingName = cursor.getStringOrEmpty("building_name"),
+                    streetName = cursor.getStringOrEmpty("street_name"),
+                    area = cursor.getStringOrEmpty("area"),
+                    postOffice = cursor.getStringOrEmpty("post_office"),
+                    taluk = cursor.getStringOrEmpty("taluk"),
+                    pinCode = cursor.getStringOrEmpty("pin_code"),
+                    googleMapLink = cursor.getStringOrEmpty("google_map_link"),
+                    notes = cursor.getStringOrEmpty("notes"),
+                    phoneNumbers = decodePhones(cursor.getStringOrEmpty("phones_data")),
+                    emailAddresses = decodeEmails(cursor.getStringOrEmpty("emails_data"))
                 )
             }
         }
@@ -89,7 +153,16 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
     }
 
     fun insertContact(draft: ContactDraft): Long {
-        return writableDatabase.insert(TABLE_CONTACTS, null, draft.toValues())
+        return writableDatabase.insert(TABLE_CONTACTS, null, draft.toValues(includeCreatedAt = true))
+    }
+
+    fun updateContact(contactId: Long, draft: ContactDraft): Int {
+        return writableDatabase.update(
+            TABLE_CONTACTS,
+            draft.toValues(includeCreatedAt = false),
+            "id = ?",
+            arrayOf(contactId.toString())
+        )
     }
 
     fun updateFavorite(contactId: Long, isFavorite: Boolean) {
@@ -154,7 +227,7 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
         )
     }
 
-    private fun ContactDraft.toValues(): ContentValues = ContentValues().apply {
+    private fun ContactDraft.toValues(includeCreatedAt: Boolean): ContentValues = ContentValues().apply {
         put("first_name", firstName.trim())
         put("last_name", lastName.trim())
         put("primary_phone", primaryPhone.trim())
@@ -166,7 +239,108 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
         put("tags", tags.filter { it.isNotBlank() }.joinToString(TAG_SEPARATOR))
         put("is_favorite", if (isFavorite) 1 else 0)
         put("photo_uri", photoUri)
-        put("created_at", System.currentTimeMillis())
+        put("gender", gender.trim())
+        put("dob", dob.trim())
+        put("rasi", rasi.trim())
+        put("nakshatra", nakshatra.trim())
+        put("door_no", doorNo.trim())
+        put("building_name", buildingName.trim())
+        put("street_name", streetName.trim())
+        put("area", area.trim())
+        put("post_office", postOffice.trim())
+        put("taluk", taluk.trim())
+        put("pin_code", pinCode.trim())
+        put("google_map_link", googleMapLink.trim())
+        put("notes", notes.trim())
+        put("phones_data", encodePhones(phoneNumbers))
+        put("emails_data", encodeEmails(emailAddresses))
+        if (includeCreatedAt) {
+            put("created_at", System.currentTimeMillis())
+        }
+    }
+
+    private fun android.database.Cursor.getStringOrEmpty(columnName: String): String {
+        val index = getColumnIndex(columnName)
+        return if (index >= 0 && !isNull(index)) getString(index).orEmpty() else ""
+    }
+
+    private fun android.database.Cursor.getStringOrNullSafe(columnName: String): String? {
+        val index = getColumnIndex(columnName)
+        return if (index >= 0 && !isNull(index)) getString(index) else null
+    }
+
+    private fun encodePhones(phones: List<ContactPhoneRecord>): String {
+        if (phones.isEmpty()) return ""
+        return JSONArray().apply {
+            phones.filter { it.displayNumber.isNotBlank() || it.localNumber.isNotBlank() }.forEach { phone ->
+                put(JSONObject().apply {
+                    put("countryName", phone.countryName)
+                    put("countryCode", phone.countryCode)
+                    put("countryFlag", phone.countryFlag)
+                    put("countryCompactLabel", phone.countryCompactLabel)
+                    put("localNumber", phone.localNumber)
+                    put("fullNumber", phone.displayNumber)
+                    put("label", phone.label)
+                    put("isPrimary", phone.isPrimary)
+                    put("isWhatsApp", phone.isWhatsApp)
+                })
+            }
+        }.toString()
+    }
+
+    private fun decodePhones(raw: String): List<ContactPhoneRecord> {
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val phone = ContactPhoneRecord(
+                        countryName = item.optString("countryName"),
+                        countryCode = item.optString("countryCode"),
+                        countryFlag = item.optString("countryFlag"),
+                        countryCompactLabel = item.optString("countryCompactLabel"),
+                        localNumber = item.optString("localNumber"),
+                        fullNumber = item.optString("fullNumber"),
+                        label = item.optString("label"),
+                        isPrimary = item.optBoolean("isPrimary"),
+                        isWhatsApp = item.optBoolean("isWhatsApp")
+                    )
+                    if (phone.displayNumber.isNotBlank()) add(phone)
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun encodeEmails(emails: List<ContactEmailRecord>): String {
+        if (emails.isEmpty()) return ""
+        return JSONArray().apply {
+            emails.filter { it.email.isNotBlank() }.forEach { email ->
+                put(JSONObject().apply {
+                    put("email", email.email)
+                    put("label", email.label)
+                    put("isPrimary", email.isPrimary)
+                })
+            }
+        }.toString()
+    }
+
+    private fun decodeEmails(raw: String): List<ContactEmailRecord> {
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val email = ContactEmailRecord(
+                        email = item.optString("email"),
+                        label = item.optString("label"),
+                        isPrimary = item.optBoolean("isPrimary")
+                    )
+                    if (email.email.isNotBlank()) add(email)
+                }
+            }
+        }.getOrDefault(emptyList())
     }
 
     private fun seedContacts(db: SQLiteDatabase) {
@@ -221,7 +395,7 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
 
     companion object {
         private const val DB_NAME = "temple_address_book.db"
-        private const val DB_VERSION = 3
+        private const val DB_VERSION = 4
         const val SCHEMA_VERSION = DB_VERSION
         private const val TABLE_CONTACTS = "contacts"
         private const val TABLE_SMART_GROUPS = "smart_groups"

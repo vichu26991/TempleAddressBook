@@ -24,6 +24,10 @@ class ContactsRepository(context: Context) {
         dbHelper.insertContact(draft)
     }
 
+    suspend fun updateContact(contactId: Long, draft: ContactDraft): Int = withContext(Dispatchers.IO) {
+        dbHelper.updateContact(contactId, draft)
+    }
+
     suspend fun saveSmartGroup(name: String, filters: AppliedContactFilters): Long = withContext(Dispatchers.IO) {
         dbHelper.saveSmartGroup(name, filters)
     }
