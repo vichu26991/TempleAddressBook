@@ -31,4 +31,28 @@ class ContactsRepository(context: Context) {
     suspend fun saveSmartGroup(name: String, filters: AppliedContactFilters): Long = withContext(Dispatchers.IO) {
         dbHelper.saveSmartGroup(name, filters)
     }
+
+    suspend fun getTags(): List<TagRecord> = withContext(Dispatchers.IO) {
+        dbHelper.getTags()
+    }
+
+    suspend fun createTag(name: String): Long = withContext(Dispatchers.IO) {
+        dbHelper.createTag(name)
+    }
+
+    suspend fun renameTag(tagId: Long, newName: String): Boolean = withContext(Dispatchers.IO) {
+        dbHelper.renameTag(tagId, newName)
+    }
+
+    suspend fun deleteTag(tagId: Long): Boolean = withContext(Dispatchers.IO) {
+        dbHelper.deleteTag(tagId)
+    }
+
+    suspend fun addContactsToTag(tagId: Long, contactIds: List<Long>) = withContext(Dispatchers.IO) {
+        dbHelper.addContactsToTag(tagId, contactIds)
+    }
+
+    suspend fun removeContactFromTag(contactId: Long, tagId: Long) = withContext(Dispatchers.IO) {
+        dbHelper.removeContactFromTag(contactId, tagId)
+    }
 }

@@ -39,6 +39,7 @@ import com.snuggy.templeaddressbook.ui.contacts.ContactsRoot
 import com.snuggy.templeaddressbook.ui.donations.DonationsScreen
 import com.snuggy.templeaddressbook.ui.groups.GroupsScreen
 import com.snuggy.templeaddressbook.ui.messages.MessagesScreen
+import com.snuggy.templeaddressbook.ui.tags.ManageTagsScreen
 import com.snuggy.templeaddressbook.ui.theme.AppBg
 import com.snuggy.templeaddressbook.ui.theme.CardWhite
 import com.snuggy.templeaddressbook.ui.theme.OrangePrimary
@@ -50,22 +51,24 @@ fun TempleAddressBookApp() {
     var selectedLanguage by rememberSaveable { mutableStateOf("EN") }
     var showBottomBar by rememberSaveable { mutableStateOf(true) }
     var utilityScreen by rememberSaveable { mutableStateOf<String?>(null) }
+    var initialManageTagName by rememberSaveable { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    fun t(en: String, ta: String): String = if (selectedLanguage == "TA") ta else en
     val drawerItems = listOf(
-        "Manage Tags",
-        "Manage Templates",
-        "Smart Groups",
-        "Address Printing",
-        "Import Contacts",
-        "Manage Donation Types",
-        "Manage Donation Items",
-        "Backup",
-        "Restore",
-        "Settings",
-        "About"
+        Triple("manage_tags", "Manage Tags", "குறிச்சொற்கள் நிர்வாகம்"),
+        Triple("manage_templates", "Manage Templates", "வார்ப்புருக்கள் நிர்வாகம்"),
+        Triple("smart_groups", "Smart Groups", "ஸ்மார்ட் குழுக்கள்"),
+        Triple("address_printing", "Address Printing", "முகவரி அச்சிடல்"),
+        Triple("import_contacts", "Import Contacts", "தொடர்புகளை இறக்குமதி செய்"),
+        Triple("manage_donation_types", "Manage Donation Types", "நன்கொடை வகைகள் நிர்வாகம்"),
+        Triple("manage_donation_items", "Manage Donation Items", "நன்கொடை பொருட்கள் நிர்வாகம்"),
+        Triple("backup", "Backup", "காப்புப்பிரதி"),
+        Triple("restore", "Restore", "மீட்டமை"),
+        Triple("settings", "Settings", "அமைப்புகள்"),
+        Triple("about", "About", "பற்றி")
     )
 
     BackHandler(enabled = drawerState.isOpen) {
@@ -85,22 +88,29 @@ fun TempleAddressBookApp() {
                 modifier = Modifier.widthIn(max = 320.dp)
             ) {
                 Text(
-                    text = "Temple Address Book",
+                    text = t("Temple Address Book", "கோவில் முகவரி புத்தகம்"),
                     color = OrangePrimary,
                     fontSize = 20.sp,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp)
                 )
                 drawerItems.forEach { item ->
+                    val label = if (selectedLanguage == "TA") item.third else item.second
                     androidx.compose.material3.NavigationDrawerItem(
-                        label = { Text(item) },
+                        label = { Text(label) },
                         selected = false,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            if (item == "About") {
-                                utilityScreen = "about"
-                                showBottomBar = false
-                            } else {
-                                Toast.makeText(context, "$item will be completed in the next phases.", Toast.LENGTH_SHORT).show()
+                            when (item.first) {
+                                "about" -> {
+                                    utilityScreen = "about"
+                                    showBottomBar = false
+                                }
+                                "manage_tags" -> {
+                                    initialManageTagName = null
+                                    utilityScreen = "manage_tags"
+                                    showBottomBar = false
+                                }
+                                else -> Toast.makeText(context, t("${item.second} will be completed in the next phases.", "${label} அடுத்த கட்டங்களில் முடிக்கப்படும்."), Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
@@ -144,12 +154,29 @@ fun TempleAddressBookApp() {
                         modifier = Modifier.fillMaxSize()
                     )
 
+                    "manage_tags" -> ManageTagsScreen(
+                        selectedLanguage = selectedLanguage,
+                        onLanguageChange = { selectedLanguage = it },
+                        onBack = {
+                            utilityScreen = null
+                            showBottomBar = true
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        initialTagName = initialManageTagName,
+                        onInitialTagConsumed = { initialManageTagName = null }
+                    )
+
                     else -> when (selectedRoute) {
                         BottomNavItem.CONTACTS.route -> ContactsRoot(
                             selectedLanguage = selectedLanguage,
                             onLanguageChange = { selectedLanguage = it },
                             onBottomBarVisibilityChange = { showBottomBar = it },
-                            onOpenMenu = { scope.launch { drawerState.open() } }
+                            onOpenMenu = { scope.launch { drawerState.open() } },
+                            onOpenTagDetail = { tagName ->
+                                initialManageTagName = tagName
+                                utilityScreen = "manage_tags"
+                                showBottomBar = false
+                            }
                         )
 
                         BottomNavItem.GROUPS.route -> GroupsScreen(Modifier.fillMaxSize())

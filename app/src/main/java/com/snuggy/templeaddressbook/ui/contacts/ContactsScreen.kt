@@ -117,7 +117,8 @@ fun ContactsRoot(
     selectedLanguage: String,
     onLanguageChange: (String) -> Unit,
     onBottomBarVisibilityChange: (Boolean) -> Unit,
-    onOpenMenu: () -> Unit
+    onOpenMenu: () -> Unit,
+    onOpenTagDetail: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val repository = remember { ContactsRepository(context) }
@@ -150,7 +151,8 @@ fun ContactsRoot(
                     refreshData()
                     screen = "list"
                 }
-            }
+            },
+            availableTags = filterOptions.tags
         )
 
         "edit" -> {
@@ -170,6 +172,7 @@ fun ContactsRoot(
                             screen = "details"
                         }
                     },
+                    availableTags = filterOptions.tags,
                     editingContact = editing
                 )
             }
@@ -200,7 +203,8 @@ fun ContactsRoot(
                     onEdit = {
                         onBottomBarVisibilityChange(false)
                         screen = "edit"
-                    }
+                    },
+                    onOpenTag = { tagName -> onOpenTagDetail(tagName) }
                 )
             }
         }
@@ -389,6 +393,7 @@ fun ContactsScreen(
             ContactFiltersSheet(
                 initialFilters = draftFilters,
                 contacts = contacts,
+                filterOptions = filterOptions,
                 onDismiss = { showFilterSheet = false },
                 onApply = {
                     appliedFilters = it
@@ -964,22 +969,20 @@ private fun ContactRow(
                     fontSize = 12.sp
                 )
                 if (contact.tags.isNotEmpty()) {
+                    val cleanTags = contact.tags
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinctBy { it.lowercase() }
+                        .sortedWith(String.CASE_INSENSITIVE_ORDER)
                     Row(
                         modifier = Modifier
-                            .padding(top = 3.dp)
+                            .padding(top = 4.dp)
+                            .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        contact.tags.forEach { tag ->
-                            AssistChip(
-                                onClick = {},
-                                label = { Text(tag) },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = SearchBg,
-                                    labelColor = Color(0xFF2E2E2E)
-                                ),
-                                border = BorderStroke(1.dp, CardBorder)
-                            )
+                        cleanTags.forEach { tag ->
+                            ContactListTagChip(tag)
                         }
                     }
                 }
@@ -998,6 +1001,25 @@ private fun ContactRow(
         if (showDivider) {
             HorizontalDivider(modifier = Modifier.padding(top = 4.dp), color = CardBorder)
         }
+    }
+}
+
+@Composable
+private fun ContactListTagChip(label: String) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = SearchBg,
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        Text(
+            text = label,
+            color = Color(0xFF2E2E2E),
+            fontWeight = FontWeight.Medium,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+        )
     }
 }
 
@@ -1139,6 +1161,7 @@ private fun EmptyContactsState(hasQuery: Boolean) {
 private fun ContactFiltersSheet(
     initialFilters: AppliedContactFilters,
     contacts: List<ContactRecord>,
+    filterOptions: ContactFilterOptions,
     onDismiss: () -> Unit,
     onApply: (AppliedContactFilters) -> Unit
 ) {
@@ -1154,13 +1177,14 @@ private fun ContactFiltersSheet(
     val selectedDistrict = districts.firstOrNull()
     val selectedVillageTown = villageTowns.firstOrNull()
 
-    val dynamicOptions = remember(contacts, selectedCountry, selectedState, selectedDistrict, selectedVillageTown) {
+    val dynamicOptions = remember(contacts, filterOptions.tags, selectedCountry, selectedState, selectedDistrict, selectedVillageTown) {
         deriveDynamicFilterOptions(
             contacts = contacts,
             country = selectedCountry,
             state = selectedState,
             district = selectedDistrict,
-            villageTown = selectedVillageTown
+            villageTown = selectedVillageTown,
+            masterTags = filterOptions.tags
         )
     }
 
@@ -1553,7 +1577,8 @@ private fun deriveDynamicFilterOptions(
     country: String?,
     state: String?,
     district: String?,
-    villageTown: String?
+    villageTown: String?,
+    masterTags: List<String>
 ): ContactFilterOptions {
     fun List<ContactRecord>.valuesOf(selector: (ContactRecord) -> String) =
         map(selector).filter { it.isNotBlank() }.distinct().sorted()
@@ -1565,7 +1590,7 @@ private fun deriveDynamicFilterOptions(
     val districts = districtScoped.valuesOf { it.district }
     val villageScoped = if (district == null) districtScoped else districtScoped.filter { it.district == district }
     val villageTowns = villageScoped.valuesOf { it.villageTown }
-    val tags = contacts.flatMap { it.tags }.filter { it.isNotBlank() }.distinct().sorted()
+    val tags = masterTags.filter { it.isNotBlank() }.distinctBy { it.lowercase() }.sortedWith(String.CASE_INSENSITIVE_ORDER)
 
     return ContactFilterOptions(
         countries = countries,

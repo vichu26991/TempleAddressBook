@@ -1,15 +1,14 @@
-val appVersionCode = 36
-val appVersionName = "1.2.29-contact-details-edit-flow"
-val appBuildDate = "2026-04-28"
+val appVersionCode = 43
+val appVersionName = "1.2.36-tags-link-text-ui-polish"
+val appBuildDate = "2026-04-29"
 
 val appBuildNotes = listOf(
-    "Patch 1.4: Contact Details cleanup plus full Edit Contact update flow.",
-    "Removed duplicate top favorite star from Contact Details; bottom Favorite action remains the single favorite control.",
-    "Edit button now opens the Add/Edit Contact screen with existing saved values prefilled.",
-    "Saving from Edit updates the existing contact instead of creating a duplicate.",
-    "Added repository and SQLite update methods for existing contact records.",
-    "No DB schema change; database remains schema 4.",
-    "Tracking files updated to catch up Patch 1.1, Patch 1.2, Patch 1.3, and this Patch 1.4."
+    "Patch 1.5.6: Tags UI polish for Contact Details and Add/Edit Contact.",
+    "Contact Details Tags section now uses clean link-style tag text rows without left icons, right arrows, or boxed submenu rows.",
+    "Tapping a tag text row from Contact Details still opens that tag detail page in Manage Tags.",
+    "Add/Edit Contact selected tags now use a compact read-only list panel instead of plain loose text.",
+    "Add/Edit Contact available tags now use compact filter-style list rows with right-side ticks instead of large green boxed rows.",
+    "Carries forward Patch 1.5.5, Patch 1.5.4, and Patch 1.5.3 real DB-backed tag integration."
 ).joinToString("\n")
 
 val appChangedFiles = listOf(
@@ -18,21 +17,22 @@ val appChangedFiles = listOf(
     "CHANGELOG.md",
     "README.md",
     "app/src/main/java/com/snuggy/templeaddressbook/data/TempleDbHelper.kt",
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/TempleAddressBookApp.kt",
     "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt",
     "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt",
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsModels.kt",
     "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsRepository.kt",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsScreen.kt"
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsScreen.kt",
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/tags/ManageTagsScreen.kt"
 ).joinToString("\n")
 
 val appTestFocus = listOf(
-    "Open Contact Details and confirm the top favorite star is removed.",
-    "Confirm bottom Favorite still toggles favorite state correctly.",
-    "Open Contact Details, tap Edit, and verify saved values are prefilled.",
-    "Change Basic Info, Address, Phone, Email, Notes, Tags, Photo, and Favorite where applicable.",
-    "Save from Edit and verify the same contact is updated, not duplicated.",
-    "Return to Contact Details and Contacts list and confirm refreshed values are visible.",
-    "Confirm main bottom tabs stay hidden inside Contact Details and return on back to Contacts list.",
-    "Regression retest Add Contact save flow, Contact Details bottom action bar, Share, More menu, Copy Address, and Open Map."
+    "Install directly over the current local build; previous Patch 1.5.3/1.5.4/1.5.5 do not need to be installed separately if skipped.",
+    "Open Contact Details for a contact with tags and verify the Tags section shows link-style tag text, not card rows.",
+    "Tap a tag text row in Contact Details and verify the matching Manage Tags detail page opens.",
+    "Edit a contact with more than 3 selected tags and verify the selected tag summary is compact, vertical, and expandable with +N more / Show less.",
+    "Verify available tag rows in Add/Edit Contact are compact list rows with right-side ticks, not large green boxes.",
+    "Verify tag assignment, rename, delete, usage count, and Contacts Tag filter remain DB-backed and synchronized."
 ).joinToString("\n")
 
 fun buildConfigString(value: String): String = buildString {

@@ -11,8 +11,10 @@ import com.snuggy.templeaddressbook.ui.contacts.ContactPhoneRecord
 import com.snuggy.templeaddressbook.ui.contacts.ContactFilterOptions
 import com.snuggy.templeaddressbook.ui.contacts.ContactRecord
 import com.snuggy.templeaddressbook.ui.contacts.SmartGroupRecord
+import com.snuggy.templeaddressbook.ui.contacts.TagRecord
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
 
@@ -67,7 +69,9 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
             """.trimIndent()
         )
 
+        createTagTables(db)
         seedContacts(db)
+        migrateLegacyTagsToMaster(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -87,6 +91,10 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
             addColumnIfMissing(db, TABLE_CONTACTS, "notes", "TEXT NOT NULL DEFAULT ''")
             addColumnIfMissing(db, TABLE_CONTACTS, "phones_data", "TEXT NOT NULL DEFAULT ''")
             addColumnIfMissing(db, TABLE_CONTACTS, "emails_data", "TEXT NOT NULL DEFAULT ''")
+        }
+        if (oldVersion < 5) {
+            createTagTables(db)
+            migrateLegacyTagsToMaster(db)
         }
     }
 
@@ -108,6 +116,7 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
 
     fun getContacts(): List<ContactRecord> {
         val contacts = mutableListOf<ContactRecord>()
+        val legacyTagMap = mutableMapOf<Long, List<String>>()
         readableDatabase.query(
             TABLE_CONTACTS,
             null,
@@ -118,8 +127,11 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
             "first_name COLLATE NOCASE ASC, last_name COLLATE NOCASE ASC"
         ).use { cursor ->
             while (cursor.moveToNext()) {
+                val contactId = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                val legacyTags = splitTags(cursor.getString(cursor.getColumnIndexOrThrow("tags")))
+                legacyTagMap[contactId] = legacyTags
                 contacts += ContactRecord(
-                    id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
+                    id = contactId,
                     firstName = cursor.getString(cursor.getColumnIndexOrThrow("first_name")),
                     lastName = cursor.getString(cursor.getColumnIndexOrThrow("last_name")),
                     primaryPhone = cursor.getString(cursor.getColumnIndexOrThrow("primary_phone")),
@@ -128,7 +140,7 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
                     district = cursor.getString(cursor.getColumnIndexOrThrow("district")),
                     state = cursor.getString(cursor.getColumnIndexOrThrow("state_name")),
                     country = cursor.getString(cursor.getColumnIndexOrThrow("country_name")),
-                    tags = splitTags(cursor.getString(cursor.getColumnIndexOrThrow("tags"))),
+                    tags = legacyTags,
                     isFavorite = cursor.getInt(cursor.getColumnIndexOrThrow("is_favorite")) == 1,
                     photoUri = cursor.getStringOrNullSafe("photo_uri"),
                     gender = cursor.getStringOrEmpty("gender"),
@@ -149,20 +161,28 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
                 )
             }
         }
-        return contacts
+        val tagMap = getTagsForContactIds(contacts.map { it.id })
+        return contacts.map { contact ->
+            val mappedTags = tagMap[contact.id].orEmpty()
+            contact.copy(tags = mappedTags.ifEmpty { legacyTagMap[contact.id].orEmpty() })
+        }
     }
 
     fun insertContact(draft: ContactDraft): Long {
-        return writableDatabase.insert(TABLE_CONTACTS, null, draft.toValues(includeCreatedAt = true))
+        val contactId = writableDatabase.insert(TABLE_CONTACTS, null, draft.toValues(includeCreatedAt = true))
+        if (contactId > 0) setContactTags(contactId, draft.tags)
+        return contactId
     }
 
     fun updateContact(contactId: Long, draft: ContactDraft): Int {
-        return writableDatabase.update(
+        val updated = writableDatabase.update(
             TABLE_CONTACTS,
             draft.toValues(includeCreatedAt = false),
             "id = ?",
             arrayOf(contactId.toString())
         )
+        if (updated > 0) setContactTags(contactId, draft.tags)
+        return updated
     }
 
     fun updateFavorite(contactId: Long, isFavorite: Boolean) {
@@ -219,12 +239,293 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
     fun getFilterOptions(): ContactFilterOptions {
         val contacts = getContacts()
         return ContactFilterOptions(
-            countries = contacts.map { it.country }.distinct().sorted(),
-            states = contacts.map { it.state }.distinct().sorted(),
-            districts = contacts.map { it.district }.distinct().sorted(),
-            villageTowns = contacts.map { it.villageTown }.distinct().sorted(),
-            tags = contacts.flatMap { it.tags }.distinct().sorted()
+            countries = contacts.map { it.country }.filter { it.isNotBlank() }.distinct().sorted(),
+            states = contacts.map { it.state }.filter { it.isNotBlank() }.distinct().sorted(),
+            districts = contacts.map { it.district }.filter { it.isNotBlank() }.distinct().sorted(),
+            villageTowns = contacts.map { it.villageTown }.filter { it.isNotBlank() }.distinct().sorted(),
+            tags = getTags().map { it.name }
         )
+    }
+
+    fun getTags(): List<TagRecord> {
+        ensureTagTables(readableDatabase)
+        val usageCounts = mutableMapOf<Long, Int>()
+        readableDatabase.rawQuery(
+            "SELECT tag_id, COUNT(contact_id) AS usage_count FROM $TABLE_CONTACT_TAGS GROUP BY tag_id",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                usageCounts[cursor.getLong(cursor.getColumnIndexOrThrow("tag_id"))] =
+                    cursor.getInt(cursor.getColumnIndexOrThrow("usage_count"))
+            }
+        }
+        val tags = mutableListOf<TagRecord>()
+        readableDatabase.query(
+            TABLE_TAGS,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "name COLLATE NOCASE ASC"
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                tags += TagRecord(
+                    id = id,
+                    name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
+                    usageCount = usageCounts[id] ?: 0,
+                    createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
+                    updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow("updated_at"))
+                )
+            }
+        }
+        return tags
+    }
+
+    fun createTag(name: String): Long {
+        val normalized = name.trim()
+        if (normalized.isBlank()) return -1L
+        findTagIdByName(writableDatabase, normalized)?.let { return it }
+        val now = System.currentTimeMillis()
+        return writableDatabase.insert(TABLE_TAGS, null, ContentValues().apply {
+            put("name", normalized)
+            put("created_at", now)
+            put("updated_at", now)
+        })
+    }
+
+    fun renameTag(tagId: Long, newName: String): Boolean {
+        val normalized = newName.trim()
+        if (tagId <= 0 || normalized.isBlank()) return false
+        val duplicateId = findTagIdByName(writableDatabase, normalized)
+        if (duplicateId != null && duplicateId != tagId) return false
+        val updated = writableDatabase.update(
+            TABLE_TAGS,
+            ContentValues().apply {
+                put("name", normalized)
+                put("updated_at", System.currentTimeMillis())
+            },
+            "id = ?",
+            arrayOf(tagId.toString())
+        )
+        syncLegacyTagsFromMappings(writableDatabase)
+        return updated > 0
+    }
+
+    fun deleteTag(tagId: Long): Boolean {
+        if (tagId <= 0) return false
+        writableDatabase.delete(TABLE_CONTACT_TAGS, "tag_id = ?", arrayOf(tagId.toString()))
+        val deleted = writableDatabase.delete(TABLE_TAGS, "id = ?", arrayOf(tagId.toString()))
+        syncLegacyTagsFromMappings(writableDatabase)
+        return deleted > 0
+    }
+
+    fun addContactsToTag(tagId: Long, contactIds: List<Long>) {
+        if (tagId <= 0 || contactIds.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            contactIds.distinct().forEach { contactId ->
+                db.insertWithOnConflict(
+                    TABLE_CONTACT_TAGS,
+                    null,
+                    ContentValues().apply {
+                        put("contact_id", contactId)
+                        put("tag_id", tagId)
+                    },
+                    SQLiteDatabase.CONFLICT_IGNORE
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        syncLegacyTagsFromMappings(db)
+    }
+
+    fun removeContactFromTag(contactId: Long, tagId: Long) {
+        writableDatabase.delete(
+            TABLE_CONTACT_TAGS,
+            "contact_id = ? AND tag_id = ?",
+            arrayOf(contactId.toString(), tagId.toString())
+        )
+        syncLegacyTagsFromMappings(writableDatabase)
+    }
+
+    private fun createTagTables(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_TAGS (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_CONTACT_TAGS (
+                contact_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY(contact_id, tag_id),
+                FOREIGN KEY(contact_id) REFERENCES $TABLE_CONTACTS(id) ON DELETE CASCADE,
+                FOREIGN KEY(tag_id) REFERENCES $TABLE_TAGS(id) ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_contact_tags_contact ON $TABLE_CONTACT_TAGS(contact_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_contact_tags_tag ON $TABLE_CONTACT_TAGS(tag_id)")
+    }
+
+    private fun ensureTagTables(db: SQLiteDatabase) {
+        createTagTables(db)
+    }
+
+    private fun migrateLegacyTagsToMaster(db: SQLiteDatabase) {
+        createTagTables(db)
+        db.query(TABLE_CONTACTS, arrayOf("id", "tags"), null, null, null, null, null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val contactId = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                val legacyTags = splitTags(cursor.getString(cursor.getColumnIndexOrThrow("tags")))
+                legacyTags.forEach { tagName ->
+                    val tagId = findOrCreateTagId(db, tagName)
+                    if (tagId > 0) {
+                        db.insertWithOnConflict(
+                            TABLE_CONTACT_TAGS,
+                            null,
+                            ContentValues().apply {
+                                put("contact_id", contactId)
+                                put("tag_id", tagId)
+                            },
+                            SQLiteDatabase.CONFLICT_IGNORE
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun setContactTags(contactId: Long, tagNames: List<String>) {
+        val db = writableDatabase
+        val cleaned = tagNames.map { it.trim() }.filter { it.isNotBlank() }.distinctBy { it.lowercase(Locale.ROOT) }
+        db.beginTransaction()
+        try {
+            db.delete(TABLE_CONTACT_TAGS, "contact_id = ?", arrayOf(contactId.toString()))
+            cleaned.forEach { tagName ->
+                val tagId = findOrCreateTagId(db, tagName)
+                if (tagId > 0) {
+                    db.insertWithOnConflict(
+                        TABLE_CONTACT_TAGS,
+                        null,
+                        ContentValues().apply {
+                            put("contact_id", contactId)
+                            put("tag_id", tagId)
+                        },
+                        SQLiteDatabase.CONFLICT_IGNORE
+                    )
+                }
+            }
+            db.update(
+                TABLE_CONTACTS,
+                ContentValues().apply { put("tags", cleaned.joinToString(TAG_SEPARATOR)) },
+                "id = ?",
+                arrayOf(contactId.toString())
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun findOrCreateTagId(db: SQLiteDatabase, tagName: String): Long {
+        val normalized = tagName.trim()
+        if (normalized.isBlank()) return -1L
+        findTagIdByName(db, normalized)?.let { return it }
+        val now = System.currentTimeMillis()
+        return db.insertWithOnConflict(
+            TABLE_TAGS,
+            null,
+            ContentValues().apply {
+                put("name", normalized)
+                put("created_at", now)
+                put("updated_at", now)
+            },
+            SQLiteDatabase.CONFLICT_IGNORE
+        ).takeIf { it > 0 } ?: findTagIdByName(db, normalized).orNegativeOne()
+    }
+
+    private fun Long?.orNegativeOne(): Long = this ?: -1L
+
+    private fun findTagIdByName(db: SQLiteDatabase, tagName: String): Long? {
+        db.query(
+            TABLE_TAGS,
+            arrayOf("id"),
+            "name = ? COLLATE NOCASE",
+            arrayOf(tagName.trim()),
+            null,
+            null,
+            null,
+            "1"
+        ).use { cursor ->
+            if (cursor.moveToFirst()) return cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+        }
+        return null
+    }
+
+    private fun getTagsForContactIds(contactIds: List<Long>): Map<Long, List<String>> {
+        if (contactIds.isEmpty()) return emptyMap()
+        ensureTagTables(readableDatabase)
+        val result = linkedMapOf<Long, MutableList<String>>()
+        val idSet = contactIds.toSet()
+        readableDatabase.rawQuery(
+            """
+            SELECT ct.contact_id, t.name
+            FROM $TABLE_CONTACT_TAGS ct
+            INNER JOIN $TABLE_TAGS t ON t.id = ct.tag_id
+            ORDER BY t.name COLLATE NOCASE ASC
+            """.trimIndent(),
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val contactId = cursor.getLong(cursor.getColumnIndexOrThrow("contact_id"))
+                if (contactId in idSet) {
+                    result.getOrPut(contactId) { mutableListOf() }
+                        .add(cursor.getString(cursor.getColumnIndexOrThrow("name")))
+                }
+            }
+        }
+        return result
+    }
+
+    private fun syncLegacyTagsFromMappings(db: SQLiteDatabase) {
+        val mapped = mutableMapOf<Long, MutableList<String>>()
+        db.rawQuery(
+            """
+            SELECT ct.contact_id, t.name
+            FROM $TABLE_CONTACT_TAGS ct
+            INNER JOIN $TABLE_TAGS t ON t.id = ct.tag_id
+            ORDER BY t.name COLLATE NOCASE ASC
+            """.trimIndent(),
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                mapped.getOrPut(cursor.getLong(cursor.getColumnIndexOrThrow("contact_id"))) { mutableListOf() }
+                    .add(cursor.getString(cursor.getColumnIndexOrThrow("name")))
+            }
+        }
+        db.query(TABLE_CONTACTS, arrayOf("id"), null, null, null, null, null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val contactId = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                db.update(
+                    TABLE_CONTACTS,
+                    ContentValues().apply { put("tags", mapped[contactId].orEmpty().joinToString(TAG_SEPARATOR)) },
+                    "id = ?",
+                    arrayOf(contactId.toString())
+                )
+            }
+        }
     }
 
     private fun ContactDraft.toValues(includeCreatedAt: Boolean): ContentValues = ContentValues().apply {
@@ -395,10 +696,12 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
 
     companion object {
         private const val DB_NAME = "temple_address_book.db"
-        private const val DB_VERSION = 4
+        private const val DB_VERSION = 5
         const val SCHEMA_VERSION = DB_VERSION
         private const val TABLE_CONTACTS = "contacts"
         private const val TABLE_SMART_GROUPS = "smart_groups"
+        private const val TABLE_TAGS = "tags"
+        private const val TABLE_CONTACT_TAGS = "contact_tags"
         private const val TAG_SEPARATOR = "|"
 
         private fun splitTags(raw: String?): List<String> = raw

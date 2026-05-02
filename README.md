@@ -1,73 +1,36 @@
-# TempleAddressBook
+# Temple Address Book
 
-## Latest build
-- Build ID: 1.2.29-contact-details-edit-flow
-- versionCode: 36
-- DB schema: 4
-- Install guidance: Install over existing app
-- Scope: Contact Details cleanup plus Edit Contact update flow.
-
-Android address book application built in Android Studio.
-
-## Branch
-- main
-
-## Current stable tracked build
-- versionCode: 36
-- versionName: 1.2.29-contact-details-edit-flow
-- focus: Contact Details cleanup and full Add/Edit Contact lifecycle
-
-## Current build summary
-- Contact Details header is cleaner because the duplicate top favorite star is removed.
-- Bottom Contact Details action bar remains:
-  - Favorite
-  - Edit
-  - Share
-  - More
-- Edit opens the Add/Edit Contact screen with saved values prefilled.
-- Save from Edit updates the existing contact instead of creating a duplicate.
-- Repository and SQLite update methods are added for existing contacts.
-- No DB schema change; database remains schema 4.
-- Tracking files include catch-up entries for v33, v34, v35, and v36.
-
-## Not included in this build
-- Tags section database implementation
-- Relationship persistence
-- Reciprocal relationship logic
-- Donations database
-- Groups or Messages feature work
-
-## Commit format
-Use:
+Current build:
 
 ```text
-v<versionCode>: <short fix title>
+Build ID: 1.2.36-tags-link-text-ui-polish
+versionCode: 43
+DB schema: 5
+Install guidance: Install over existing app
+Uninstall required: No
 ```
 
-Examples:
-- v33: contact details layout favorite hotfix
-- v34: contact details bottom actions
-- v35: contact details hide bottom nav
-- v36: contact details edit flow
+## Patch 1.5.6 focus
 
-## Tracking files
-- CHANGELOG.md
-- BUILD_HISTORY.md
+This build is cumulative over Patch 1.5.3, 1.5.4, and 1.5.5.
 
-## Build release checklist
-For every tracked build, update:
-- `app/build.gradle.kts`
-- `CHANGELOG.md`
-- `BUILD_HISTORY.md`
-- `README.md`
+Included:
 
-Also record:
-- Build ID / versionName
-- files changed
-- DB impact
-- install guidance
-- test focus
-- regression areas to retest
+- Real DB-backed Manage Tags integration using `tags` and `contact_tags`.
+- Manage Tags create / rename / delete / usage count / add-remove contacts.
+- Add/Edit Contact assigns existing tags only.
+- Contact Details header uses compact horizontal-scroll tag chips.
+- Contact Details Tags section now uses clean link-style tag text rows.
+- No left label icon, no right arrow, and no boxed submenu rows in Contact Details Tags section.
+- Tapping a Contact Details tag text opens that tag's Manage Tags detail page.
+- Add/Edit Contact selected tags are listed in a compact read-only list panel with `+N more` / `Show less`.
+- Add/Edit Contact available tags use compact filter-style rows with right-side ticks.
 
-## Backup zip naming
-TempleAddressBook_v<versionCode>_<short-name>_YYYY-MM-DD.zip
+## Test focus
+
+1. Open a contact with assigned tags.
+2. Scroll to the Contact Details Tags section.
+3. Verify tags look like clean link text rows, not card rows.
+4. Tap a tag and confirm its Manage Tags detail opens.
+5. Edit a contact with many tags and verify the selected tag summary is compact and expandable.
+6. Verify available tags are compact rows with ticks, not large green boxes.

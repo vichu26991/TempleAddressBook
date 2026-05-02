@@ -38,6 +38,16 @@ data class ContactEmailRecord(
     val isPrimary: Boolean = false
 )
 
+
+@Immutable
+data class TagRecord(
+    val id: Long,
+    val name: String,
+    val usageCount: Int = 0,
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L
+)
+
 @Immutable
 data class ContactRecord(
     val id: Long,

@@ -64,6 +64,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DropdownMenu
@@ -136,6 +137,7 @@ fun AddContactScreen(
     onLanguageChange: (String) -> Unit,
     onBack: () -> Unit,
     onSave: (ContactDraft) -> Unit,
+    availableTags: List<String> = emptyList(),
     relationshipContactOptions: List<String> = emptyList(),
     editingContact: ContactRecord? = null
 ) {
@@ -238,13 +240,15 @@ fun AddContactScreen(
     val relationshipRows = remember { mutableStateListOf<RelationshipRowInput>() }
     val selectedTags = remember(editingContact?.id) { mutableStateListOf<String>().apply { addAll(editingContact?.tags.orEmpty()) } }
     var tagSearch by rememberSaveable { mutableStateOf("") }
+    var showAllSelectedTags by rememberSaveable { mutableStateOf(false) }
 
-    val quickTags = remember(selectedLanguage) {
-        if (selectedLanguage == "TA") {
-            listOf("தை அமாவாசை", "நிர்வாகம்", "கமிட்டி", "புதிய குடும்பம்", "தானதரர்")
-        } else {
-            listOf("Thai Amavasai", "Nirvaga", "Committee", "New Family", "Donor")
-        }
+    val selectedTagSnapshot = selectedTags.toList()
+    val tagOptions = remember(availableTags, selectedTagSnapshot) {
+        (availableTags + selectedTagSnapshot)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
     }
     val addressDistrictHistory = remember { mutableStateListOf<String>().apply { addAll(loadAddressSuggestionHistory(context, ADDRESS_HISTORY_DISTRICT)) } }
     val addressStateHistory = remember { mutableStateListOf<String>().apply { addAll(loadAddressSuggestionHistory(context, ADDRESS_HISTORY_STATE)) } }
@@ -1039,55 +1043,54 @@ fun AddContactScreen(
                 }
 
                 SectionCard(
-                    title = localizedLabel("Tags", "டேக்குகள்"),
+                    title = localizedLabel("Tags", "குறிச்சொற்கள்"),
                     expanded = activeSection == AddSection.TAGS,
                     onHeaderClick = {
                         activeSection = if (activeSection == AddSection.TAGS) null else AddSection.TAGS
                     }
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SmallSecondaryActionButton(localizedLabel("Manage Tags", "டேக்குகளை நிர்வகிக்க")) {}
-                        SmallSecondaryActionButton(localizedLabel("+ New Tag", "+ புதிய டேக்")) {}
-                    }
-                    LabeledCompactField(
-                        label = localizedLabel("Search Tags", "டேக்குகளை தேடு"),
-                        value = tagSearch,
-                        onValueChange = { tagSearch = it },
-                        placeholder = localizedLabel("Type to filter tags", "டேக்குகளை வடிகட்ட தட்டச்சு செய்க")
-                    )
-                    TagChipsRow(
-                        options = quickTags.filter { tagSearch.isBlank() || it.contains(tagSearch, ignoreCase = true) },
-                        selectedTags = selectedTags,
-                        onToggle = { tag ->
-                            if (selectedTags.contains(tag)) selectedTags.remove(tag) else selectedTags.add(tag)
-                        }
-                    )
-                    if (selectedTags.isNotEmpty()) {
-                        Text(
-                            text = localizedLabel("Selected Tags", "தேர்ந்தெடுத்த டேக்குகள்"),
-                            color = MutedText,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                        TagChipsRow(options = selectedTags.toList(), selectedTags = selectedTags, onToggle = { tag -> selectedTags.remove(tag) })
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(localizedLabel("Mark as favorite", "பிடித்ததாக குறிக்க"), fontWeight = FontWeight.Medium)
-                        Switch(
-                            checked = isFavorite,
-                            onCheckedChange = { isFavorite = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = SuccessGreen,
-                                uncheckedBorderColor = CardBorder
+                    if (tagOptions.isEmpty()) {
+                        DetailNoteText(
+                            localizedLabel(
+                                "No tags available. Create tags from Manage Tags.",
+                                "குறிச்சொற்கள் இல்லை. குறிச்சொற்கள் நிர்வாகத்தில் உருவாக்கவும்."
                             )
                         )
+                    } else {
+                        if (selectedTags.isNotEmpty()) {
+                            Text(
+                                text = localizedLabel("Selected Tags", "தேர்ந்தெடுத்த குறிச்சொற்கள்"),
+                                color = MutedText,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 10.5.sp,
+                                modifier = Modifier.padding(top = 1.dp)
+                            )
+                            SelectedTagsTextSummary(
+                                tags = selectedTags.toList().sortedWith(String.CASE_INSENSITIVE_ORDER),
+                                expanded = showAllSelectedTags,
+                                selectedLanguage = selectedLanguage,
+                                onToggleExpanded = { showAllSelectedTags = !showAllSelectedTags }
+                            )
+                        }
+                        CompactTagSearchField(
+                            value = tagSearch,
+                            onValueChange = { tagSearch = it },
+                            placeholder = localizedLabel("Search tags", "குறிச்சொற்களைத் தேடுக")
+                        )
+                        AvailableTagRows(
+                            options = tagOptions.filter { tagSearch.isBlank() || it.contains(tagSearch, ignoreCase = true) },
+                            selectedTags = selectedTags,
+                            selectedLanguage = selectedLanguage,
+                            onToggle = { tag ->
+                                if (selectedTags.any { it.equals(tag, ignoreCase = true) }) {
+                                    selectedTags.removeAll { it.equals(tag, ignoreCase = true) }
+                                } else {
+                                    selectedTags.add(tag)
+                                }
+                            }
+                        )
                     }
+
                 }
             }
 
@@ -1558,7 +1561,7 @@ private fun CompactPremiumDropdownField(
     onSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         Box(modifier = Modifier.wrapContentWidth()) {
             Surface(
@@ -1639,7 +1642,7 @@ private fun SearchableCompactPremiumDropdownField(
         if (searchQuery.isBlank()) options else options.filter { it.contains(searchQuery, ignoreCase = true) }
     }
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         Box(modifier = Modifier.wrapContentWidth()) {
             Surface(
@@ -1867,7 +1870,7 @@ private fun SelectionField(
     options: List<String>,
     onSelected: (String) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         Box {
             Surface(
@@ -1933,7 +1936,7 @@ private fun PhoneRowEditor(
     val typeLabel = if (selectedLanguage == "TA") "வகை" else "Type"
     val whatsappAllowed = isWhatsAppAllowed(row.label)
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2346,7 +2349,7 @@ private fun EmailRowEditor(
 ) {
     val typeLabel = if (selectedLanguage == "TA") "வகை" else "Type"
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         if (showDuplicateWarning) {
             Text(
                 text = if (selectedLanguage == "TA") "நகல் மின்னஞ்சல் பதிவு" else "Duplicate email entry",
@@ -2600,7 +2603,7 @@ private fun RelationshipRowEditor(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Row(
             modifier = Modifier
@@ -2679,7 +2682,7 @@ private fun RelationshipRowEditor(
 @Composable
 private fun SmallSelectionField(label: String, value: String, options: List<String>, onSelected: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Text(label, color = Color(0xFF333333), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         Box {
             Surface(
@@ -2820,6 +2823,79 @@ private fun ActionRowButton(label: String, danger: Boolean = false, onClick: () 
 }
 
 @Composable
+private fun DetailNoteText(text: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = SearchBg,
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        Text(
+            text = text,
+            color = MutedText,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+        )
+    }
+}
+
+@Composable
+private fun AvailableTagRows(
+    options: List<String>,
+    selectedTags: List<String>,
+    selectedLanguage: String,
+    onToggle: (String) -> Unit
+) {
+    if (options.isEmpty()) {
+        DetailNoteText(if (selectedLanguage == "TA") "பொருந்தும் குறிச்சொற்கள் இல்லை" else "No matching tags")
+        return
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 190.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = SearchBg,
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+        ) {
+            options.forEachIndexed { index, tag ->
+                val selected = selectedTags.any { it.equals(tag, ignoreCase = true) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onToggle(tag) }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = tag,
+                        color = Color(0xFF232323),
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        fontSize = 12.8.sp,
+                        lineHeight = 16.sp,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (selected) {
+                        Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(15.dp))
+                    }
+                }
+                if (index != options.lastIndex) {
+                    HorizontalDivider(color = CardBorder.copy(alpha = 0.60f))
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
 private fun AddInlineAction(label: String, onClick: () -> Unit) {
     TextButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
         Text(label, color = SuccessGreen, fontWeight = FontWeight.SemiBold)
@@ -2841,28 +2917,104 @@ private fun SmallSecondaryActionButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TagChipsRow(options: List<String>, selectedTags: List<String>, onToggle: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.chunked(2).forEach { rowItems ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                rowItems.forEach { tag ->
-                    FilterChip(
-                        selected = selectedTags.contains(tag),
-                        onClick = { onToggle(tag) },
-                        label = { Text(tag) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = SuccessGreen.copy(alpha = 0.12f),
-                            selectedLabelColor = SuccessGreen,
-                            containerColor = SearchBg,
-                            labelColor = Color(0xFF2A2A2A)
-                        ),
-                        border = BorderStroke(1.dp, if (selectedTags.contains(tag)) SuccessGreen.copy(alpha = 0.34f) else CardBorder)
-                    )
+private fun SelectedTagsTextSummary(
+    tags: List<String>,
+    expanded: Boolean,
+    selectedLanguage: String,
+    onToggleExpanded: () -> Unit
+) {
+    val visible = if (expanded) tags else tags.take(3)
+    val hiddenCount = (tags.size - visible.size).coerceAtLeast(0)
+    val canToggle = tags.size > 3
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 3.dp, bottom = 7.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = SearchBg,
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            visible.forEachIndexed { index, tag ->
+                Text(
+                    text = tag,
+                    color = Color(0xFF2E2E2E),
+                    fontSize = 12.5.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+                if (index != visible.lastIndex || canToggle) {
+                    HorizontalDivider(color = CardBorder.copy(alpha = 0.55f))
                 }
+            }
+            if (canToggle) {
+                Text(
+                    text = if (expanded) {
+                        if (selectedLanguage == "TA") "குறைவாக காட்டு" else "Show less"
+                    } else {
+                        if (selectedLanguage == "TA") "+$hiddenCount மேலும்" else "+$hiddenCount more"
+                    },
+                    color = SuccessGreen,
+                    fontSize = 12.5.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onToggleExpanded)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
             }
         }
     }
 }
+
+
+@Composable
+private fun CompactTagSearchField(value: String, onValueChange: (String) -> Unit, placeholder: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = SearchBg,
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = Color(0xFF232323),
+                fontSize = 13.sp,
+                lineHeight = 16.sp
+            ),
+            cursorBrush = SolidColor(OrangePrimary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp),
+            decorationBox = { innerTextField ->
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    if (value.isBlank()) {
+                        Text(
+                            text = placeholder,
+                            color = MutedText.copy(alpha = 0.65f),
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        )
+    }
+}
+
 
 @Composable
 private fun SaveBottomBar(selectedLanguage: String, highlighted: Boolean, onSave: () -> Unit) {

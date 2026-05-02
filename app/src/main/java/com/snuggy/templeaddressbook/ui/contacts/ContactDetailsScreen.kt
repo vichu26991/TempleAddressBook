@@ -11,6 +11,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -90,7 +92,8 @@ fun ContactDetailsScreen(
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
     selectedLanguage: String = "EN",
-    onEdit: (() -> Unit)? = null
+    onEdit: (() -> Unit)? = null,
+    onOpenTag: ((String) -> Unit)? = null
 ) {
     BackHandler(onBack = onBack)
 
@@ -98,7 +101,13 @@ fun ContactDetailsScreen(
     val primaryPhone = contact.primaryPhoneForDisplay
     val whatsAppPhone = contact.whatsAppPhoneForDisplay
     val primaryEmail = contact.primaryEmailForDisplay
-
+    val sortedTags = remember(contact.tags) {
+        contact.tags
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+    }
     fun t(en: String, ta: String): String = if (selectedLanguage == "TA") ta else en
 
     fun openChooser(intent: Intent, title: String) {
@@ -194,15 +203,14 @@ fun ContactDetailsScreen(
             .background(AppBg)
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding(),
+            modifier = Modifier.fillMaxWidth(),
             color = OrangePrimary,
             shadowElevation = 3.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -255,21 +263,11 @@ fun ContactDetailsScreen(
                         }
                     }
 
-                    if (contact.tags.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier
-                                .padding(top = 12.dp)
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            contact.tags.take(3).forEach { tag ->
-                                DetailTagChip(tag)
-                            }
-                            val hiddenCount = contact.tags.size - 3
-                            if (hiddenCount > 0) {
-                                DetailTagChip("+$hiddenCount")
-                            }
-                        }
+                    if (sortedTags.isNotEmpty()) {
+                        HeaderTagSummary(
+                            tags = sortedTags,
+                            modifier = Modifier.padding(top = 10.dp)
+                        )
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp), color = CardBorder)
@@ -318,6 +316,14 @@ fun ContactDetailsScreen(
                 DetailLine(icon = Icons.Outlined.Info, label = t("Date of Birth", "பிறந்த தேதி"), value = contact.dob)
                 DetailLine(icon = Icons.Outlined.Info, label = t("Rasi", "ராசி"), value = contact.rasi)
                 DetailLine(icon = Icons.Outlined.Info, label = t("Nakshatra", "நட்சத்திரம்"), value = contact.nakshatra)
+            }
+
+            DetailInfoCard(title = t("Tags", "குறிச்சொற்கள்")) {
+                if (sortedTags.isEmpty()) {
+                    DetailEmptyText(t("No tags saved", "குறிச்சொற்கள் இல்லை"))
+                } else {
+                    DetailTagList(tags = sortedTags, onTagClick = onOpenTag)
+                }
             }
 
             DetailInfoCard(title = t("Phone Numbers", "தொலைபேசி எண்கள்")) {
@@ -601,16 +607,90 @@ private fun DetailEmptyText(text: String) {
 }
 
 @Composable
-private fun DetailTagChip(label: String) {
-    AssistChip(
-        onClick = {},
-        label = { Text(label) },
-        colors = AssistChipDefaults.assistChipColors(
-            containerColor = SearchBg,
-            labelColor = Color(0xFF363636)
-        ),
+private fun DetailTagList(tags: List<String>, onTagClick: ((String) -> Unit)?) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        tags.forEachIndexed { index, tag ->
+            val rowModifier = if (onTagClick != null) {
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onTagClick(tag) }
+            } else {
+                Modifier.fillMaxWidth()
+            }
+            Text(
+                text = tag,
+                color = OrangePrimary,
+                fontSize = 13.5.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = rowModifier.padding(vertical = 7.dp)
+            )
+            if (index != tags.lastIndex) {
+                HorizontalDivider(color = CardBorder.copy(alpha = 0.65f))
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun HeaderTagSummary(
+    tags: List<String>,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        tags.forEach { tag ->
+            HeaderTagChip(label = tag)
+        }
+    }
+}
+
+@Composable
+private fun HeaderTagChip(label: String) {
+    Surface(
+        shape = RoundedCornerShape(9.dp),
+        color = SearchBg,
         border = BorderStroke(1.dp, CardBorder)
-    )
+    ) {
+        Text(
+            text = label,
+            color = Color(0xFF363636),
+            fontWeight = FontWeight.Medium,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+        )
+    }
+}
+
+
+@Composable
+private fun DetailTagChip(label: String) {
+    Surface(
+        shape = RoundedCornerShape(9.dp),
+        color = SearchBg,
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        Text(
+            text = label,
+            color = Color(0xFF363636),
+            fontWeight = FontWeight.Medium,
+            fontSize = 10.5.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+        )
+    }
 }
 
 @Composable
