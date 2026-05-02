@@ -1,14 +1,13 @@
-val appVersionCode = 43
-val appVersionName = "1.2.36-tags-link-text-ui-polish"
-val appBuildDate = "2026-04-29"
+val appVersionCode = 45
+val appVersionName = "1.2.38-dropdown-ui-polish"
+val appBuildDate = "2026-05-02"
 
 val appBuildNotes = listOf(
-    "Patch 1.5.6: Tags UI polish for Contact Details and Add/Edit Contact.",
-    "Contact Details Tags section now uses clean link-style tag text rows without left icons, right arrows, or boxed submenu rows.",
-    "Tapping a tag text row from Contact Details still opens that tag detail page in Manage Tags.",
-    "Add/Edit Contact selected tags now use a compact read-only list panel instead of plain loose text.",
-    "Add/Edit Contact available tags now use compact filter-style list rows with right-side ticks instead of large green boxed rows.",
-    "Carries forward Patch 1.5.5, Patch 1.5.4, and Patch 1.5.3 real DB-backed tag integration."
+    "Patch 1.6.1: Dropdown visual polish and Relationship detail icon cleanup.",
+    "Removed the tag/label-style icon from Contact Details relationship rows.",
+    "Updated compact dropdown menu presentation for Rasi, Nakshatra, phone label, email label, relationship type, and country selector.",
+    "Dropdown options now use cleaner boxed rows with selected tick styling to match the Tags visual language.",
+    "No relationship logic, tag logic, phone/email save logic, or DB schema changes were made."
 ).joinToString("\n")
 
 val appChangedFiles = listOf(
@@ -16,23 +15,16 @@ val appChangedFiles = listOf(
     "BUILD_HISTORY.md",
     "CHANGELOG.md",
     "README.md",
-    "app/src/main/java/com/snuggy/templeaddressbook/data/TempleDbHelper.kt",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/TempleAddressBookApp.kt",
     "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsModels.kt",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsRepository.kt",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactsScreen.kt",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/tags/ManageTagsScreen.kt"
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt"
 ).joinToString("\n")
 
 val appTestFocus = listOf(
-    "Install directly over the current local build; previous Patch 1.5.3/1.5.4/1.5.5 do not need to be installed separately if skipped.",
-    "Open Contact Details for a contact with tags and verify the Tags section shows link-style tag text, not card rows.",
-    "Tap a tag text row in Contact Details and verify the matching Manage Tags detail page opens.",
-    "Edit a contact with more than 3 selected tags and verify the selected tag summary is compact, vertical, and expandable with +N more / Show less.",
-    "Verify available tag rows in Add/Edit Contact are compact list rows with right-side ticks, not large green boxes.",
-    "Verify tag assignment, rename, delete, usage count, and Contacts Tag filter remain DB-backed and synchronized."
+    "Install directly over versionCode 44; do not uninstall.",
+    "Open Contact Details and verify relationship rows no longer show the tag/label icon.",
+    "Open Add/Edit Contact and verify Rasi/Nakshatra dropdown menus use the cleaner boxed option style.",
+    "Verify phone label, email label, and relationship type dropdown menus use the same visual style.",
+    "Verify selection values, save behavior, relationships, tags, phone, and email remain unchanged."
 ).joinToString("\n")
 
 fun buildConfigString(value: String): String = buildString {

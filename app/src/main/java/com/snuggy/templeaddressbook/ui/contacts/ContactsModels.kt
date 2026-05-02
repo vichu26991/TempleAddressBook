@@ -39,6 +39,27 @@ data class ContactEmailRecord(
 )
 
 
+
+@Immutable
+data class ContactRelationshipRecord(
+    val id: Long = 0L,
+    val ownerContactId: Long = 0L,
+    val relatedContactId: Long? = null,
+    val relationshipType: String = "",
+    val relatedContactName: String = "",
+    val referenceName: String = "",
+    val isReverse: Boolean = false,
+    val isContextualReverse: Boolean = false
+) {
+    val displayName: String = relatedContactName.ifBlank { referenceName }
+}
+
+data class ContactRelationshipDraft(
+    val relationshipType: String,
+    val relatedContactName: String = "",
+    val referenceName: String = ""
+)
+
 @Immutable
 data class TagRecord(
     val id: Long,
@@ -76,7 +97,8 @@ data class ContactRecord(
     val googleMapLink: String = "",
     val notes: String = "",
     val phoneNumbers: List<ContactPhoneRecord> = emptyList(),
-    val emailAddresses: List<ContactEmailRecord> = emptyList()
+    val emailAddresses: List<ContactEmailRecord> = emptyList(),
+    val relationships: List<ContactRelationshipRecord> = emptyList()
 ) {
     val fullName: String = listOf(firstName.trim(), lastName.trim())
         .filter { it.isNotBlank() }
@@ -163,7 +185,8 @@ data class ContactDraft(
     val googleMapLink: String = "",
     val notes: String = "",
     val phoneNumbers: List<ContactPhoneRecord> = emptyList(),
-    val emailAddresses: List<ContactEmailRecord> = emptyList()
+    val emailAddresses: List<ContactEmailRecord> = emptyList(),
+    val relationships: List<ContactRelationshipDraft> = emptyList()
 )
 
 data class ContactFilterOptions(

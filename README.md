@@ -3,34 +3,33 @@
 Current build:
 
 ```text
-Build ID: 1.2.36-tags-link-text-ui-polish
-versionCode: 43
-DB schema: 5
+Build ID: 1.2.38-dropdown-ui-polish
+versionCode: 45
+DB schema: 6
 Install guidance: Install over existing app
 Uninstall required: No
 ```
 
-## Patch 1.5.6 focus
+## Patch 1.6 focus
 
-This build is cumulative over Patch 1.5.3, 1.5.4, and 1.5.5.
+This build adds real relationship persistence and Contact Details display.
 
 Included:
 
-- Real DB-backed Manage Tags integration using `tags` and `contact_tags`.
-- Manage Tags create / rename / delete / usage count / add-remove contacts.
-- Add/Edit Contact assigns existing tags only.
-- Contact Details header uses compact horizontal-scroll tag chips.
-- Contact Details Tags section now uses clean link-style tag text rows.
-- No left label icon, no right arrow, and no boxed submenu rows in Contact Details Tags section.
-- Tapping a Contact Details tag text opens that tag's Manage Tags detail page.
-- Add/Edit Contact selected tags are listed in a compact read-only list panel with `+N more` / `Show less`.
-- Add/Edit Contact available tags use compact filter-style rows with right-side ticks.
+- New `contact_relationships` table.
+- Add/Edit Contact relationship rows are saved to DB.
+- Existing saved relationship rows are restored when editing a contact.
+- Contact Details shows direct relationships.
+- Contact Details shows reciprocal family/symmetric relationships.
+- Contact Details shows contextual reverse helper/staff relationships such as `Vishwa’s Driver`.
+- Existing contacts, tags, and contact-tag mappings are preserved.
 
 ## Test focus
 
-1. Open a contact with assigned tags.
-2. Scroll to the Contact Details Tags section.
-3. Verify tags look like clean link text rows, not card rows.
-4. Tap a tag and confirm its Manage Tags detail opens.
-5. Edit a contact with many tags and verify the selected tag summary is compact and expandable.
-6. Verify available tags are compact rows with ticks, not large green boxes.
+1. Add a contact relationship using an existing saved contact.
+2. Add a reference-only relationship name.
+3. Save and open Contact Details.
+4. Verify direct relationship rows appear.
+5. Open the related contact and verify reciprocal/context relationship appears.
+6. Edit the original contact and verify relationship rows are prefilled.
+7. Retest Tags, Phone, Email, Address, Add Contact save, and Edit Contact save.

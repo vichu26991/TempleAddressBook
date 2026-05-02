@@ -9,6 +9,8 @@ import com.snuggy.templeaddressbook.ui.contacts.ContactDraft
 import com.snuggy.templeaddressbook.ui.contacts.ContactEmailRecord
 import com.snuggy.templeaddressbook.ui.contacts.ContactPhoneRecord
 import com.snuggy.templeaddressbook.ui.contacts.ContactFilterOptions
+import com.snuggy.templeaddressbook.ui.contacts.ContactRelationshipDraft
+import com.snuggy.templeaddressbook.ui.contacts.ContactRelationshipRecord
 import com.snuggy.templeaddressbook.ui.contacts.ContactRecord
 import com.snuggy.templeaddressbook.ui.contacts.SmartGroupRecord
 import com.snuggy.templeaddressbook.ui.contacts.TagRecord
@@ -70,6 +72,7 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
         )
 
         createTagTables(db)
+        createRelationshipTable(db)
         seedContacts(db)
         migrateLegacyTagsToMaster(db)
     }
@@ -95,6 +98,9 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
         if (oldVersion < 5) {
             createTagTables(db)
             migrateLegacyTagsToMaster(db)
+        }
+        if (oldVersion < 6) {
+            createRelationshipTable(db)
         }
     }
 
@@ -161,16 +167,24 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
                 )
             }
         }
-        val tagMap = getTagsForContactIds(contacts.map { it.id })
+        val contactIds = contacts.map { it.id }
+        val tagMap = getTagsForContactIds(contactIds)
+        val relationshipMap = getRelationshipsForContactIds(contacts)
         return contacts.map { contact ->
             val mappedTags = tagMap[contact.id].orEmpty()
-            contact.copy(tags = mappedTags.ifEmpty { legacyTagMap[contact.id].orEmpty() })
+            contact.copy(
+                tags = mappedTags.ifEmpty { legacyTagMap[contact.id].orEmpty() },
+                relationships = relationshipMap[contact.id].orEmpty()
+            )
         }
     }
 
     fun insertContact(draft: ContactDraft): Long {
         val contactId = writableDatabase.insert(TABLE_CONTACTS, null, draft.toValues(includeCreatedAt = true))
-        if (contactId > 0) setContactTags(contactId, draft.tags)
+        if (contactId > 0) {
+            setContactTags(contactId, draft.tags)
+            setContactRelationships(contactId, draft.relationships)
+        }
         return contactId
     }
 
@@ -181,7 +195,10 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
             "id = ?",
             arrayOf(contactId.toString())
         )
-        if (updated > 0) setContactTags(contactId, draft.tags)
+        if (updated > 0) {
+            setContactTags(contactId, draft.tags)
+            setContactRelationships(contactId, draft.relationships)
+        }
         return updated
     }
 
@@ -351,6 +368,181 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
             arrayOf(contactId.toString(), tagId.toString())
         )
         syncLegacyTagsFromMappings(writableDatabase)
+    }
+
+
+    private fun createRelationshipTable(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_CONTACT_RELATIONSHIPS (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_contact_id INTEGER NOT NULL,
+                related_contact_id INTEGER,
+                related_contact_name TEXT NOT NULL DEFAULT '',
+                relationship_type TEXT NOT NULL,
+                reference_name TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY(owner_contact_id) REFERENCES $TABLE_CONTACTS(id) ON DELETE CASCADE,
+                FOREIGN KEY(related_contact_id) REFERENCES $TABLE_CONTACTS(id) ON DELETE SET NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_contact_relationship_owner ON $TABLE_CONTACT_RELATIONSHIPS(owner_contact_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_contact_relationship_related ON $TABLE_CONTACT_RELATIONSHIPS(related_contact_id)")
+    }
+
+    private fun setContactRelationships(contactId: Long, relationships: List<ContactRelationshipDraft>) {
+        val db = writableDatabase
+        createRelationshipTable(db)
+        val cleaned = relationships
+            .map {
+                it.copy(
+                    relationshipType = it.relationshipType.trim(),
+                    relatedContactName = it.relatedContactName.trim(),
+                    referenceName = it.referenceName.trim()
+                )
+            }
+            .filter { it.relationshipType.isNotBlank() && (it.relatedContactName.isNotBlank() || it.referenceName.isNotBlank()) }
+
+        db.beginTransaction()
+        try {
+            db.delete(TABLE_CONTACT_RELATIONSHIPS, "owner_contact_id = ?", arrayOf(contactId.toString()))
+            cleaned.forEach { relationship ->
+                val relatedId = findContactIdByFullName(db, relationship.relatedContactName, contactId)
+                db.insert(
+                    TABLE_CONTACT_RELATIONSHIPS,
+                    null,
+                    ContentValues().apply {
+                        put("owner_contact_id", contactId)
+                        if (relatedId != null) put("related_contact_id", relatedId) else putNull("related_contact_id")
+                        put("related_contact_name", relationship.relatedContactName)
+                        put("relationship_type", relationship.relationshipType)
+                        put("reference_name", relationship.referenceName)
+                        put("created_at", System.currentTimeMillis())
+                    }
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun findContactIdByFullName(db: SQLiteDatabase, fullName: String, excludeContactId: Long): Long? {
+        val normalized = fullName.trim()
+        if (normalized.isBlank()) return null
+        db.query(
+            TABLE_CONTACTS,
+            arrayOf("id", "first_name", "last_name"),
+            "id <> ?",
+            arrayOf(excludeContactId.toString()),
+            null,
+            null,
+            "first_name COLLATE NOCASE ASC, last_name COLLATE NOCASE ASC"
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                val name = listOf(
+                    cursor.getString(cursor.getColumnIndexOrThrow("first_name")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("last_name"))
+                ).map { it.trim() }.filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Unnamed Contact" }
+                if (name.equals(normalized, ignoreCase = true)) return id
+            }
+        }
+        return null
+    }
+
+    private fun getRelationshipsForContactIds(contacts: List<ContactRecord>): Map<Long, List<ContactRelationshipRecord>> {
+        if (contacts.isEmpty()) return emptyMap()
+        val db = writableDatabase
+        createRelationshipTable(db)
+        val contactById = contacts.associateBy { it.id }
+        val result = linkedMapOf<Long, MutableList<ContactRelationshipRecord>>()
+        val idSet = contactById.keys
+
+        db.query(
+            TABLE_CONTACT_RELATIONSHIPS,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "created_at ASC, id ASC"
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                val ownerId = cursor.getLong(cursor.getColumnIndexOrThrow("owner_contact_id"))
+                val relatedIndex = cursor.getColumnIndex("related_contact_id")
+                val relatedId = if (relatedIndex >= 0 && !cursor.isNull(relatedIndex)) cursor.getLong(relatedIndex) else null
+                val storedRelatedName = cursor.getStringOrEmpty("related_contact_name")
+                val relationshipType = cursor.getStringOrEmpty("relationship_type")
+                val referenceName = cursor.getStringOrEmpty("reference_name")
+                val relatedName = relatedId?.let { contactById[it]?.fullName }.orEmpty().ifBlank { storedRelatedName }
+
+                if (ownerId in idSet) {
+                    result.getOrPut(ownerId) { mutableListOf() }.add(
+                        ContactRelationshipRecord(
+                            id = id,
+                            ownerContactId = ownerId,
+                            relatedContactId = relatedId,
+                            relationshipType = relationshipType,
+                            relatedContactName = relatedName,
+                            referenceName = referenceName,
+                            isReverse = false,
+                            isContextualReverse = false
+                        )
+                    )
+                }
+
+                if (relatedId != null && relatedId in idSet) {
+                    val ownerName = contactById[ownerId]?.fullName.orEmpty()
+                    val reverseType = reverseRelationshipType(relationshipType)
+                    val isContextual = reverseType == null
+                    val displayType = reverseType ?: contextualReverseType(ownerName, relationshipType)
+                    result.getOrPut(relatedId) { mutableListOf() }.add(
+                        ContactRelationshipRecord(
+                            id = id,
+                            ownerContactId = ownerId,
+                            relatedContactId = relatedId,
+                            relationshipType = displayType,
+                            relatedContactName = if (isContextual) "" else ownerName,
+                            referenceName = "",
+                            isReverse = true,
+                            isContextualReverse = isContextual
+                        )
+                    )
+                }
+            }
+        }
+        return result
+    }
+
+    private fun reverseRelationshipType(type: String): String? = when (type.trim().lowercase(Locale.ROOT)) {
+        "husband" -> "Wife"
+        "wife" -> "Husband"
+        "son" -> "Parent"
+        "daughter" -> "Parent"
+        "father" -> "Child"
+        "mother" -> "Child"
+        "brother" -> "Brother"
+        "sister" -> "Sister"
+        "elder brother" -> "Younger Brother"
+        "younger brother" -> "Elder Brother"
+        "elder sister" -> "Younger Sister"
+        "younger sister" -> "Elder Sister"
+        "grandfather" -> "Grandchild"
+        "grandmother" -> "Grandchild"
+        "grandson" -> "Grandfather"
+        "granddaughter" -> "Grandmother"
+        "friend" -> "Friend"
+        "neighbor" -> "Neighbor"
+        "family friend" -> "Family Friend"
+        else -> null
+    }
+
+    private fun contextualReverseType(ownerName: String, relationshipType: String): String = when {
+        ownerName.isBlank() -> relationshipType
+        else -> "$ownerName’s $relationshipType"
     }
 
     private fun createTagTables(db: SQLiteDatabase) {
@@ -696,12 +888,13 @@ class TempleDbHelper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null
 
     companion object {
         private const val DB_NAME = "temple_address_book.db"
-        private const val DB_VERSION = 5
+        private const val DB_VERSION = 6
         const val SCHEMA_VERSION = DB_VERSION
         private const val TABLE_CONTACTS = "contacts"
         private const val TABLE_SMART_GROUPS = "smart_groups"
         private const val TABLE_TAGS = "tags"
         private const val TABLE_CONTACT_TAGS = "contact_tags"
+        private const val TABLE_CONTACT_RELATIONSHIPS = "contact_relationships"
         private const val TAG_SEPARATOR = "|"
 
         private fun splitTags(raw: String?): List<String> = raw

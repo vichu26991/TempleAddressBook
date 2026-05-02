@@ -237,7 +237,22 @@ fun AddContactScreen(
         }
         mutableStateListOf<EmailRowInput>().apply { addAll(initialRows) }
     }
-    val relationshipRows = remember { mutableStateListOf<RelationshipRowInput>() }
+    val relationshipRows = remember(editingContact?.id) {
+        mutableStateListOf<RelationshipRowInput>().apply {
+            editingContact?.relationships
+                .orEmpty()
+                .filter { !it.isReverse }
+                .forEach { relationship ->
+                    add(
+                        RelationshipRowInput(
+                            relatedContact = relationship.relatedContactName,
+                            type = localizeRelationshipValue(relationship.relationshipType, selectedLanguage),
+                            relatedName = relationship.referenceName
+                        )
+                    )
+                }
+        }
+    }
     val selectedTags = remember(editingContact?.id) { mutableStateListOf<String>().apply { addAll(editingContact?.tags.orEmpty()) } }
     var tagSearch by rememberSaveable { mutableStateOf("") }
     var showAllSelectedTags by rememberSaveable { mutableStateOf(false) }
@@ -589,7 +604,16 @@ fun AddContactScreen(
                 googleMapLink = googleMapLink.trim(),
                 notes = notes.trim(),
                 phoneNumbers = savedPhoneRows,
-                emailAddresses = savedEmailRows
+                emailAddresses = savedEmailRows,
+                relationships = relationshipRows
+                    .filter { !isBlankRelationshipRow(it) && isValidRelationshipRow(it) }
+                    .map { row ->
+                        ContactRelationshipDraft(
+                            relationshipType = localizeRelationshipValue(row.type, "EN").trim(),
+                            relatedContactName = row.relatedContact.trim(),
+                            referenceName = row.relatedName.trim()
+                        )
+                    }
             )
         )
     }
@@ -1550,6 +1574,77 @@ private fun DobField(
     }
 }
 
+
+@Composable
+private fun PremiumDropdownMenuContainer(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    maxHeight: Dp = 280.dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier
+            .widthIn(min = 160.dp, max = 320.dp)
+            .heightIn(max = maxHeight)
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        containerColor = CardWhite,
+        tonalElevation = 0.dp,
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, CardBorder.copy(alpha = 0.9f)),
+        content = content
+    )
+}
+
+@Composable
+private fun PremiumDropdownOptionRow(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) SuccessGreen.copy(alpha = 0.10f) else CardWhite,
+        border = BorderStroke(
+            1.dp,
+            if (selected) SuccessGreen.copy(alpha = 0.34f) else CardBorder.copy(alpha = 0.70f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.weight(1f),
+                color = if (enabled) Color(0xFF202020) else MutedText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontSize = 13.sp
+            )
+            if (selected) {
+                Icon(
+                    Icons.Outlined.Check,
+                    contentDescription = null,
+                    tint = SuccessGreen,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun CompactPremiumDropdownField(
     label: String,
@@ -1596,26 +1691,16 @@ private fun CompactPremiumDropdownField(
                     )
                 }
             }
-            DropdownMenu(
+            PremiumDropdownMenuContainer(
                 expanded = expanded,
                 onDismissRequest = onExpandedChange,
-                modifier = Modifier.heightIn(max = 280.dp)
+                maxHeight = 280.dp
             ) {
                 options.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = option,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
-                            )
-                        },
-                        onClick = { onSelected(option) },
-                        trailingIcon = if (option == value) {
-                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
-                        } else null,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    PremiumDropdownOptionRow(
+                        text = option,
+                        selected = option == value,
+                        onClick = { onSelected(option) }
                     )
                 }
             }
@@ -1894,26 +1979,16 @@ private fun SelectionField(
                     Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText, modifier = Modifier.size(16.dp))
                 }
             }
-            DropdownMenu(
+            PremiumDropdownMenuContainer(
                 expanded = expanded,
                 onDismissRequest = onExpandedChange,
-                modifier = Modifier.heightIn(max = 280.dp)
+                maxHeight = 280.dp
             ) {
                 options.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = option,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
-                            )
-                        },
-                        onClick = { onSelected(option) },
-                        trailingIcon = if (option == value) {
-                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
-                        } else null,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    PremiumDropdownOptionRow(
+                        text = option,
+                        selected = option == value,
+                        onClick = { onSelected(option) }
                     )
                 }
             }
@@ -2036,29 +2111,19 @@ private fun CompactSelectionPicker(
             }
         }
 
-        DropdownMenu(
+        PremiumDropdownMenuContainer(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.heightIn(max = 280.dp)
+            maxHeight = 280.dp
         ) {
             options.forEach { option ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = option,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
-                        )
-                    },
+                PremiumDropdownOptionRow(
+                    text = option,
+                    selected = option == value,
                     onClick = {
                         expanded = false
                         onSelected(option)
-                    },
-                    trailingIcon = if (option == value) {
-                        { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
-                    } else null,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    }
                 )
             }
         }
@@ -2250,30 +2315,22 @@ private fun CountryCodePicker(
                 Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText, modifier = Modifier.size(9.dp))
             }
         }
-        DropdownMenu(
+        PremiumDropdownMenuContainer(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.heightIn(max = 320.dp)
+            maxHeight = 320.dp,
+            modifier = Modifier.widthIn(min = 240.dp, max = 340.dp)
         ) {
             COUNTRY_OPTIONS.forEach { item ->
+                val selected = item.code == country.code && item.compactLabel == country.compactLabel
                 val optionLabel = "${item.flag} ${if (selectedLanguage == "TA" && item.nameTa.isNotBlank()) item.nameTa else item.nameEn}  ${item.code}"
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = optionLabel,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = if (item.code == country.code && item.compactLabel == country.compactLabel) FontWeight.SemiBold else FontWeight.Medium
-                        )
-                    },
+                PremiumDropdownOptionRow(
+                    text = optionLabel,
+                    selected = selected,
                     onClick = {
                         expanded = false
                         onSelected(item)
-                    },
-                    trailingIcon = if (item.code == country.code && item.compactLabel == country.compactLabel) {
-                        { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
-                    } else null,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    }
                 )
             }
         }
@@ -2706,29 +2763,19 @@ private fun SmallSelectionField(label: String, value: String, options: List<Stri
                     Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = MutedText, modifier = Modifier.size(16.dp))
                 }
             }
-            DropdownMenu(
+            PremiumDropdownMenuContainer(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier.heightIn(max = 280.dp)
+                maxHeight = 280.dp
             ) {
                 options.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = option,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = if (option == value) FontWeight.SemiBold else FontWeight.Medium
-                            )
-                        },
+                    PremiumDropdownOptionRow(
+                        text = option,
+                        selected = option == value,
                         onClick = {
                             expanded = false
                             onSelected(option)
-                        },
-                        trailingIcon = if (option == value) {
-                            { Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp)) }
-                        } else null,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        }
                     )
                 }
             }

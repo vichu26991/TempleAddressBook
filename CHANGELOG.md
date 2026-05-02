@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.2.38-dropdown-ui-polish — versionCode 45
+
+### Changed
+- Removed the tag/label-style icon from Contact Details relationship rows.
+- Polished compact dropdown menu visuals for Rasi, Nakshatra, phone label, email label, relationship type, and country selector.
+- Dropdown options now use cleaner boxed rows with selected tick styling, matching the Tags UI direction.
+
+### DB impact
+- No DB schema change.
+
+## 1.2.37-relationship-db-display — versionCode 44
+
+### Added
+- Added DB-backed relationship persistence using `contact_relationships`.
+- Add/Edit Contact relationship rows are now saved with the contact.
+- Edit Contact now restores previously saved direct relationship rows.
+- Contact Details now shows a Relationships section.
+- Added reciprocal display for clear family/symmetric relationships.
+- Added contextual reverse display for helper/staff relationships, such as `Vishwa’s Driver`.
+
+### DB impact
+- Schema changes from 5 to 6.
+- Safe migration creates `contact_relationships` only.
+- Existing contacts and tags are not wiped.
+
+### Install guidance
+- Install over existing app.
+- No uninstall required.
+
 ## 1.2.36-tags-link-text-ui-polish — versionCode 43
 
 ### Important

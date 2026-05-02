@@ -318,6 +318,19 @@ fun ContactDetailsScreen(
                 DetailLine(icon = Icons.Outlined.Info, label = t("Nakshatra", "நட்சத்திரம்"), value = contact.nakshatra)
             }
 
+            DetailInfoCard(title = t("Relationships", "உறவுகள்")) {
+                if (contact.relationships.isEmpty()) {
+                    DetailEmptyText(t("No relationships saved", "உறவுகள் இல்லை"))
+                } else {
+                    contact.relationships.forEachIndexed { index, relationship ->
+                        RelationshipDetailLine(relationship = relationship, selectedLanguage = selectedLanguage)
+                        if (index != contact.relationships.lastIndex) {
+                            HorizontalDivider(color = CardBorder.copy(alpha = 0.55f))
+                        }
+                    }
+                }
+            }
+
             DetailInfoCard(title = t("Tags", "குறிச்சொற்கள்")) {
                 if (sortedTags.isEmpty()) {
                     DetailEmptyText(t("No tags saved", "குறிச்சொற்கள் இல்லை"))
@@ -562,6 +575,20 @@ private fun DetailLine(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 }
 
 @Composable
+private fun RelationshipDetailLine(relationship: ContactRelationshipRecord, selectedLanguage: String) {
+    val label = localizedRelationshipTypeForDetails(relationship.relationshipType, selectedLanguage)
+    val name = relationship.displayName
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (relationship.isContextualReverse || name.isBlank()) {
+            Text(label, color = Color(0xFF222222), fontWeight = FontWeight.SemiBold)
+        } else {
+            Text(label, color = MutedText, fontWeight = FontWeight.Medium)
+            Text(name, color = Color(0xFF222222), fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
 private fun PhoneDetailLine(phone: ContactPhoneRecord, selectedLanguage: String) {
     val tPrimary = if (selectedLanguage == "TA") "முதன்மை" else "Primary"
     val tWhatsApp = if (selectedLanguage == "TA") "வாட்ஸ்அப்" else "WhatsApp"
@@ -692,6 +719,68 @@ private fun DetailTagChip(label: String) {
         )
     }
 }
+
+private fun localizedRelationshipTypeForDetails(value: String, selectedLanguage: String): String {
+    if (value.isBlank()) return value
+    if (selectedLanguage != "TA") return value
+    val contextualMarker = "’s "
+    if (value.contains(contextualMarker)) {
+        val owner = value.substringBefore(contextualMarker).trim()
+        val type = value.substringAfter(contextualMarker).trim()
+        return if (owner.isNotBlank() && type.isNotBlank()) {
+            "$owner-வின் ${localizedRelationshipTypeForDetails(type, selectedLanguage)}"
+        } else value
+    }
+    return RELATIONSHIP_DETAIL_LABELS.firstOrNull { it.first == value || it.second == value }?.second ?: value
+}
+
+private val RELATIONSHIP_DETAIL_LABELS = listOf(
+    "Husband" to "கணவர்",
+    "Wife" to "மனைவி",
+    "Son" to "மகன்",
+    "Daughter" to "மகள்",
+    "Father" to "அப்பா",
+    "Mother" to "அம்மா",
+    "Parent" to "பெற்றோர்",
+    "Child" to "குழந்தை",
+    "Brother" to "சகோதரர்",
+    "Sister" to "சகோதரி",
+    "Elder Brother" to "அண்ணன்",
+    "Younger Brother" to "தம்பி",
+    "Elder Sister" to "அக்கா",
+    "Younger Sister" to "தங்கை",
+    "Grandfather" to "தாத்தா",
+    "Grandmother" to "பாட்டி",
+    "Grandchild" to "பேரன் / பேத்தி",
+    "Grandson" to "பேரன்",
+    "Granddaughter" to "பேத்தி",
+    "Uncle" to "மாமா",
+    "Aunt" to "அத்தை",
+    "Chithappa" to "சித்தப்பா",
+    "Chithi" to "சித்தி",
+    "Periyappa" to "பெரியப்பா",
+    "Periyamma" to "பெரியம்மா",
+    "Father-in-law" to "மாமனார்",
+    "Mother-in-law" to "மாமியார்",
+    "Son-in-law" to "மருமகன்",
+    "Daughter-in-law" to "மருமகள்",
+    "Brother-in-law" to "மைத்துனன்",
+    "Sister-in-law" to "மைத்துனி",
+    "Relative" to "உறவினர்",
+    "PA" to "பி.ஏ",
+    "Manager" to "மேனேஜர்",
+    "Watchman" to "வாட்ச்மேன்",
+    "Security" to "செக்யூரிட்டி",
+    "House Maid" to "ஹவுஸ் மேய்ட்",
+    "Driver" to "டிரைவர்",
+    "Cook" to "குக்",
+    "Gardener" to "தோட்டக்காரர்",
+    "Caretaker" to "கேர் டேக்கர்",
+    "Neighbor" to "பக்கத்து வீட்டுக்காரர்",
+    "Friend" to "நண்பர்",
+    "Family Friend" to "குடும்ப நண்பர்",
+    "Other" to "மற்றவை"
+)
 
 @Composable
 private fun DetailsAvatar(contact: ContactRecord) {
