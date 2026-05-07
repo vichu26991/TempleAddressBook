@@ -1,35 +1,18 @@
 # Temple Address Book
 
-Current build:
+Current patch: **1.2.43-gesture-photo-crop-editor** (`versionCode 50`).
 
-```text
-Build ID: 1.2.38-dropdown-ui-polish
-versionCode: 45
-DB schema: 6
-Install guidance: Install over existing app
-Uninstall required: No
-```
+## Current build focus
+- Modernized Add/Edit Contact photo selection flow.
+- Camera/Gallery selection opens a full-photo crop editor.
+- The editor shows the selected image with a circular contact-photo crop overlay.
+- Removed outdated on-screen `+` / `−` and `○+` / `○−` controls.
+- User adjusts the image using touch gestures: drag to reposition and pinch to zoom.
+- `Done` saves the cropped area as the contact photo.
+- Works in both Add Contact and Edit Contact.
 
-## Patch 1.6 focus
+## Install guidance
+Install over the existing app. Do not uninstall.
 
-This build adds real relationship persistence and Contact Details display.
-
-Included:
-
-- New `contact_relationships` table.
-- Add/Edit Contact relationship rows are saved to DB.
-- Existing saved relationship rows are restored when editing a contact.
-- Contact Details shows direct relationships.
-- Contact Details shows reciprocal family/symmetric relationships.
-- Contact Details shows contextual reverse helper/staff relationships such as `Vishwa’s Driver`.
-- Existing contacts, tags, and contact-tag mappings are preserved.
-
-## Test focus
-
-1. Add a contact relationship using an existing saved contact.
-2. Add a reference-only relationship name.
-3. Save and open Contact Details.
-4. Verify direct relationship rows appear.
-5. Open the related contact and verify reciprocal/context relationship appears.
-6. Edit the original contact and verify relationship rows are prefilled.
-7. Retest Tags, Phone, Email, Address, Add Contact save, and Edit Contact save.
+## DB impact
+No DB schema change. Current schema remains 6.

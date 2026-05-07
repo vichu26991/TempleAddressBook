@@ -1,5 +1,91 @@
 # Changelog
 
+## 1.2.43-gesture-photo-crop-editor — versionCode 50
+
+### Changed
+- Removed the outdated on-screen `+` / `−` zoom buttons and `○+` / `○−` crop-size controls from the photo crop editor.
+- Photo adjustment now uses modern touch behavior: drag to reposition and pinch to zoom.
+- The crop editor keeps the full selected photo, circular crop overlay, dimmed outside area, corner handles, Cancel, and Done.
+- Works from both Add Contact and Edit Contact.
+
+### DB impact
+- No DB schema change.
+
+### Install guidance
+- Install over existing app.
+- No uninstall required.
+
+## 1.2.42-full-photo-crop-editor-corrected — versionCode 49
+
+### Fixed
+- Corrected the photo editor to match the shared reference behavior: full selected image behind a circular contact-photo crop overlay.
+- Removed the misleading contact-icon-only editor approach.
+- The crop workspace now uses the full screen area with black background, dimmed outside-circle area, circular guide, and corner handles.
+- `Done` now saves a real cropped contact-photo image from the selected circular area instead of only saving transform values.
+- Works from both Add Contact and Edit Contact.
+
+### Controls
+- Drag the image to reposition.
+- Pinch or use `+` / `−` to zoom.
+- Use `○+` / `○−` to adjust the crop guide size when needed.
+- `Cancel` exits without applying the image.
+- `Done` applies the crop and returns to Add/Edit Contact.
+
+### DB impact
+- No DB schema change.
+
+### Install guidance
+- Install over existing app.
+- No uninstall required.
+
+## 1.2.41-full-photo-crop-editor — versionCode 48
+
+### Changed
+- Corrected the photo editor behavior to show the **full selected photo** with a circular contact-icon crop guide.
+- User can drag or pinch the full image while seeing which part will be saved inside the contact photo circle.
+- The saved result remains the circular contact photo and works in both Add Contact and Edit Contact.
+- Kept `+` / `−` zoom buttons, Reset, Cancel, Done, and Use as contact photo actions.
+
+### DB impact
+- No DB schema change.
+
+### Install guidance
+- Install over existing app.
+- No uninstall required.
+
+## 1.2.40-contact-icon-photo-editor — versionCode 47
+
+### Changed
+- Reworked the Add/Edit Contact photo adjustment flow into a contact-icon focused edit screen.
+- After **Take Photo** or **Choose from Gallery**, the editor opens immediately before the image is applied.
+- The editor shows a circular contact-icon crop preview only, not a full-screen photo preview.
+- Added drag, pinch zoom, `+` / `−` zoom buttons, Reset, Cancel, Done, and Use as contact photo actions.
+- Confirmed crop still reflects across Add/Edit Contact, Contacts list, and Contact Details.
+
+### DB impact
+- No DB schema change.
+
+### Install guidance
+- Install over existing app.
+- No uninstall required.
+
+## 1.2.39-photo-filter-ui-polish — versionCode 46
+
+### Changed
+- Photo selection/capture now opens a full edit screen for crop/reposition before applying the image.
+- Contacts filter search fields now use compact BasicTextField styling closer to Add/Edit Contact tag search height.
+- Contacts filter option lists now use cleaner boxed rows with dividers and right-side ticks.
+- Country/state/district/village filter matching now normalizes saved value variants, such as `Tamil Nadu`, `tamilnadu`, and `TamilNadu`.
+- Contact Details Basic Info icons were refreshed.
+- Removed the bottom Save bar from Add/Edit Contact; top Save remains.
+
+### DB impact
+- No DB schema change.
+
+### Install guidance
+- Install over existing app.
+- No uninstall required.
+
 ## 1.2.38-dropdown-ui-polish — versionCode 45
 
 ### Changed

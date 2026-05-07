@@ -1,13 +1,14 @@
-val appVersionCode = 45
-val appVersionName = "1.2.38-dropdown-ui-polish"
+val appVersionCode = 50
+val appVersionName = "1.2.43-gesture-photo-crop-editor"
 val appBuildDate = "2026-05-02"
 
 val appBuildNotes = listOf(
-    "Patch 1.6.1: Dropdown visual polish and Relationship detail icon cleanup.",
-    "Removed the tag/label-style icon from Contact Details relationship rows.",
-    "Updated compact dropdown menu presentation for Rasi, Nakshatra, phone label, email label, relationship type, and country selector.",
-    "Dropdown options now use cleaner boxed rows with selected tick styling to match the Tags visual language.",
-    "No relationship logic, tag logic, phone/email save logic, or DB schema changes were made."
+    "Patch 1.6.6: Modernized the Add/Edit Contact photo crop editor by removing outdated on-screen +/- controls.",
+    "Camera/Gallery selection in both Add Contact and Edit Contact opens the full-photo crop editor with a circular crop overlay.",
+    "Users now adjust the photo using natural touch gestures: drag to reposition and pinch to zoom.",
+    "The crop UI keeps only Cancel and Done actions, matching modern contact-photo crop behavior.",
+    "Done creates and stores a real cropped contact-photo image from the circular crop area.",
+    "No DB schema change."
 ).joinToString("\n")
 
 val appChangedFiles = listOf(
@@ -15,16 +16,17 @@ val appChangedFiles = listOf(
     "BUILD_HISTORY.md",
     "CHANGELOG.md",
     "README.md",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt",
-    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/ContactDetailsScreen.kt"
+    "app/src/main/java/com/snuggy/templeaddressbook/ui/contacts/AddContactScreen.kt"
 ).joinToString("\n")
 
 val appTestFocus = listOf(
-    "Install directly over versionCode 44; do not uninstall.",
-    "Open Contact Details and verify relationship rows no longer show the tag/label icon.",
-    "Open Add/Edit Contact and verify Rasi/Nakshatra dropdown menus use the cleaner boxed option style.",
-    "Verify phone label, email label, and relationship type dropdown menus use the same visual style.",
-    "Verify selection values, save behavior, relationships, tags, phone, and email remain unchanged."
+    "Install directly over versionCode 49; do not uninstall.",
+    "Add Contact → Add/Change Photo → Choose from Gallery and verify full image opens with circular crop overlay.",
+    "Add Contact → Camera and verify the same editor opens immediately after capture.",
+    "Edit existing contact → Change Photo and verify the same editor works in edit mode.",
+    "Verify the editor has no outdated +/- or circle +/- buttons; only Cancel and Done should be shown.",
+    "Test drag to reposition and pinch to zoom the image inside the crop area.",
+    "After Done, verify the cropped contact photo preview appears correctly, then Save and check Contacts list and Contact Details."
 ).joinToString("\n")
 
 fun buildConfigString(value: String): String = buildString {

@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.VolunteerActivism
@@ -310,12 +312,12 @@ fun ContactDetailsScreen(
             }
 
             DetailInfoCard(title = t("Basic Info", "அடிப்படை தகவல்")) {
-                DetailLine(icon = Icons.Outlined.Info, label = t("First Name", "முதல் பெயர்"), value = contact.firstName)
-                DetailLine(icon = Icons.Outlined.Info, label = t("Last Name", "கடைசி பெயர்"), value = contact.lastName)
-                DetailLine(icon = Icons.Outlined.Info, label = t("Gender", "பாலினம்"), value = contact.gender)
-                DetailLine(icon = Icons.Outlined.Info, label = t("Date of Birth", "பிறந்த தேதி"), value = contact.dob)
-                DetailLine(icon = Icons.Outlined.Info, label = t("Rasi", "ராசி"), value = contact.rasi)
-                DetailLine(icon = Icons.Outlined.Info, label = t("Nakshatra", "நட்சத்திரம்"), value = contact.nakshatra)
+                DetailLine(icon = Icons.Outlined.Person, label = t("First Name", "முதல் பெயர்"), value = contact.firstName)
+                DetailLine(icon = Icons.Outlined.Person, label = t("Last Name", "கடைசி பெயர்"), value = contact.lastName)
+                DetailLine(icon = Icons.Outlined.Person, label = t("Gender", "பாலினம்"), value = contact.gender)
+                DetailLine(icon = Icons.Outlined.CalendarMonth, label = t("Date of Birth", "பிறந்த தேதி"), value = contact.dob)
+                DetailLine(icon = Icons.Outlined.Star, label = t("Rasi", "ராசி"), value = contact.rasi)
+                DetailLine(icon = Icons.Outlined.Star, label = t("Nakshatra", "நட்சத்திரம்"), value = contact.nakshatra)
             }
 
             DetailInfoCard(title = t("Relationships", "உறவுகள்")) {

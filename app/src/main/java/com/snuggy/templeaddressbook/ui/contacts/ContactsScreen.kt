@@ -35,6 +35,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -83,6 +84,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
@@ -106,6 +108,7 @@ import com.snuggy.templeaddressbook.ui.theme.SearchBg
 import com.snuggy.templeaddressbook.ui.theme.SuccessGreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 private sealed interface ContactListItem {
     data class Header(val letter: String) : ContactListItem
@@ -1313,6 +1316,55 @@ private fun ContactFiltersSheet(
 }
 
 @Composable
+private fun CompactFilterSearchField(value: String, onValueChange: (String) -> Unit, placeholder: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 36.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = SearchBg,
+        border = BorderStroke(1.dp, CardBorder)
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = Color(0xFF232323),
+                fontSize = 13.sp,
+                lineHeight = 16.sp
+            ),
+            cursorBrush = SolidColor(OrangePrimary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp),
+            decorationBox = { innerTextField ->
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    if (value.isBlank()) {
+                        Text(
+                            text = placeholder,
+                            color = MutedText.copy(alpha = 0.65f),
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    innerTextField()
+                    if (value.isNotBlank()) {
+                        IconButton(
+                            onClick = { onValueChange("") },
+                            modifier = Modifier.align(Alignment.CenterEnd).size(30.dp)
+                        ) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Clear", tint = MutedText, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
 private fun MultiSelectFilterCard(
     title: String,
     options: List<String>,
@@ -1360,46 +1412,32 @@ private fun MultiSelectFilterCard(
 
             if (expanded) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 0.dp)) {
-                    OutlinedTextField(
+                    CompactFilterSearchField(
                         value = query,
                         onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
-                        placeholder = { Text("Search $title") },
-                        singleLine = true,
-                        trailingIcon = {
-                            if (query.isNotBlank()) {
-                                IconButton(onClick = { query = "" }) {
-                                    Icon(Icons.Outlined.Close, contentDescription = "Clear")
-                                }
-                            }
-                        },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = CardWhite,
-                            unfocusedContainerColor = CardWhite,
-                            focusedBorderColor = OrangePrimary.copy(alpha = 0.35f),
-                            unfocusedBorderColor = CardBorder,
-                            cursorColor = OrangePrimary
-                        )
+                        placeholder = "Search $title"
                     )
-                    Column(
+                    Surface(
                         modifier = Modifier
-                            .heightIn(max = 130.dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(top = 2.dp, bottom = 3.dp),
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                            .fillMaxWidth()
+                            .heightIn(max = 150.dp)
+                            .padding(top = 4.dp, bottom = 4.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = SearchBg,
+                        border = BorderStroke(1.dp, CardBorder)
                     ) {
-                        filteredOptions.forEach { option ->
-                            val isSelected = option in selected
-                            Surface(
-                                onClick = { onSelectedChange(if (isSelected) selected - option else selected + option) },
-                                color = if (isSelected) FilterBg else Color.Transparent,
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
+                        Column(
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            filteredOptions.forEachIndexed { index, option ->
+                                val isSelected = option in selected
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                                        .clickable { onSelectedChange(if (isSelected) selected - option else selected + option) }
+                                        .background(if (isSelected) FilterBg else Color.Transparent)
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
@@ -1408,11 +1446,16 @@ private fun MultiSelectFilterCard(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         color = Color(0xFF232323),
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                        fontSize = 12.8.sp,
+                                        lineHeight = 16.sp,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
                                     )
                                     if (isSelected) {
-                                        Icon(Icons.Outlined.Check, contentDescription = null, tint = OrangePrimary, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(15.dp))
                                     }
+                                }
+                                if (index != filteredOptions.lastIndex) {
+                                    HorizontalDivider(color = CardBorder.copy(alpha = 0.60f))
                                 }
                             }
                         }
@@ -1467,63 +1510,53 @@ private fun SingleSelectFilterCard(
 
             if (expanded) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 0.dp)) {
-                    OutlinedTextField(
+                    CompactFilterSearchField(
                         value = query,
                         onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
-                        placeholder = { Text("Search $title") },
-                        singleLine = true,
-                        trailingIcon = {
-                            if (query.isNotBlank()) {
-                                IconButton(onClick = { query = "" }) {
-                                    Icon(Icons.Outlined.Close, contentDescription = "Clear")
-                                }
-                            }
-                        },
-                        shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = CardWhite,
-                            unfocusedContainerColor = CardWhite,
-                            focusedBorderColor = OrangePrimary.copy(alpha = 0.35f),
-                            unfocusedBorderColor = CardBorder,
-                            cursorColor = OrangePrimary
-                        )
+                        placeholder = "Search $title"
                     )
-                    Column(
+                    Surface(
                         modifier = Modifier
-                            .heightIn(max = 130.dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(top = 2.dp, bottom = 3.dp),
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                            .fillMaxWidth()
+                            .heightIn(max = 150.dp)
+                            .padding(top = 4.dp, bottom = 4.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = SearchBg,
+                        border = BorderStroke(1.dp, CardBorder)
                     ) {
-                        Surface(
-                            onClick = { onSelectedChange(null) },
-                            color = if (selected == null) FilterBg else Color.Transparent,
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                            val anySelected = selected == null
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    .clickable { onSelectedChange(null) }
+                                    .background(if (anySelected) FilterBg else Color.Transparent)
+                                    .padding(horizontal = 10.dp, vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Any", modifier = Modifier.weight(1f), color = Color(0xFF232323))
-                                if (selected == null) {
-                                    Icon(Icons.Outlined.Check, contentDescription = null, tint = OrangePrimary, modifier = Modifier.size(18.dp))
+                                Text(
+                                    "Any",
+                                    modifier = Modifier.weight(1f),
+                                    color = Color(0xFF232323),
+                                    fontSize = 12.8.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = if (anySelected) FontWeight.SemiBold else FontWeight.Medium
+                                )
+                                if (anySelected) {
+                                    Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(15.dp))
                                 }
                             }
-                        }
-                        filteredOptions.forEach { option ->
-                            val isSelected = option == selected
-                            Surface(
-                                onClick = { onSelectedChange(option) },
-                                color = if (isSelected) FilterBg else Color.Transparent,
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
+                            if (filteredOptions.isNotEmpty()) {
+                                HorizontalDivider(color = CardBorder.copy(alpha = 0.60f))
+                            }
+                            filteredOptions.forEachIndexed { index, option ->
+                                val isSelected = sameFilterValue(option, selected)
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                                        .clickable { onSelectedChange(option) }
+                                        .background(if (isSelected) FilterBg else Color.Transparent)
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
@@ -1532,11 +1565,16 @@ private fun SingleSelectFilterCard(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         color = Color(0xFF232323),
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                        fontSize = 12.8.sp,
+                                        lineHeight = 16.sp,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
                                     )
                                     if (isSelected) {
-                                        Icon(Icons.Outlined.Check, contentDescription = null, tint = OrangePrimary, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Outlined.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(15.dp))
                                     }
+                                }
+                                if (index != filteredOptions.lastIndex) {
+                                    HorizontalDivider(color = CardBorder.copy(alpha = 0.60f))
                                 }
                             }
                         }
@@ -1564,10 +1602,10 @@ private fun findClosestSectionIndex(letter: String, sectionIndexMap: Map<String,
 }
 
 private fun contactMatchesFilters(contact: ContactRecord, filters: AppliedContactFilters): Boolean {
-    val countryMatch = filters.countries.isEmpty() || filters.countries.first() == contact.country
-    val stateMatch = filters.states.isEmpty() || filters.states.first() == contact.state
-    val districtMatch = filters.districts.isEmpty() || filters.districts.first() == contact.district
-    val villageMatch = filters.villageTowns.isEmpty() || filters.villageTowns.first() == contact.villageTown
+    val countryMatch = filters.countries.isEmpty() || sameFilterValue(filters.countries.first(), contact.country)
+    val stateMatch = filters.states.isEmpty() || sameFilterValue(filters.states.first(), contact.state)
+    val districtMatch = filters.districts.isEmpty() || sameFilterValue(filters.districts.first(), contact.district)
+    val villageMatch = filters.villageTowns.isEmpty() || sameFilterValue(filters.villageTowns.first(), contact.villageTown)
     val tagMatch = filters.tags.isEmpty() || filters.tags.all { selected -> contact.tags.any { it.equals(selected, ignoreCase = true) } }
     return countryMatch && stateMatch && districtMatch && villageMatch && tagMatch
 }
@@ -1581,14 +1619,20 @@ private fun deriveDynamicFilterOptions(
     masterTags: List<String>
 ): ContactFilterOptions {
     fun List<ContactRecord>.valuesOf(selector: (ContactRecord) -> String) =
-        map(selector).filter { it.isNotBlank() }.distinct().sorted()
+        map(selector)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .groupBy { normalizeFilterValue(it) }
+            .filterKeys { it.isNotBlank() }
+            .map { (_, variants) -> preferredFilterDisplayValue(variants) }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
 
     val countries = contacts.valuesOf { it.country }
-    val stateScoped = if (country == null) contacts else contacts.filter { it.country == country }
+    val stateScoped = if (country == null) contacts else contacts.filter { sameFilterValue(it.country, country) }
     val states = stateScoped.valuesOf { it.state }
-    val districtScoped = if (state == null) stateScoped else stateScoped.filter { it.state == state }
+    val districtScoped = if (state == null) stateScoped else stateScoped.filter { sameFilterValue(it.state, state) }
     val districts = districtScoped.valuesOf { it.district }
-    val villageScoped = if (district == null) districtScoped else districtScoped.filter { it.district == district }
+    val villageScoped = if (district == null) districtScoped else districtScoped.filter { sameFilterValue(it.district, district) }
     val villageTowns = villageScoped.valuesOf { it.villageTown }
     val tags = masterTags.filter { it.isNotBlank() }.distinctBy { it.lowercase() }.sortedWith(String.CASE_INSENSITIVE_ORDER)
 
@@ -1600,6 +1644,31 @@ private fun deriveDynamicFilterOptions(
         tags = tags
     )
 }
+
+private fun normalizeFilterValue(value: String?): String = value
+    .orEmpty()
+    .trim()
+    .lowercase(Locale.ROOT)
+    .filter { it.isLetterOrDigit() }
+
+private fun sameFilterValue(left: String?, right: String?): Boolean {
+    val leftKey = normalizeFilterValue(left)
+    val rightKey = normalizeFilterValue(right)
+    return leftKey.isNotBlank() && leftKey == rightKey
+}
+
+private fun preferredFilterDisplayValue(values: List<String>): String = values
+    .map { it.trim() }
+    .filter { it.isNotBlank() }
+    .distinct()
+    .sortedWith(
+        compareByDescending<String> { it.any { ch -> ch.isWhitespace() } }
+            .thenByDescending { it.count { ch -> ch.isUpperCase() } }
+            .thenBy { it.length }
+            .thenBy { it.lowercase(Locale.ROOT) }
+    )
+    .firstOrNull()
+    .orEmpty()
 
 private fun gradientForName(name: String): List<Color> {
     val palettes = listOf(

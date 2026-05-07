@@ -14,6 +14,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -88,7 +89,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -96,12 +96,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -335,7 +339,6 @@ fun AddContactScreen(
     val firstNameMissing = saveAttempted && firstName.isBlank()
     val phoneMissing = saveAttempted && phoneRows.none { it.localNumber.isNotBlank() }
     val canHighlightSave = firstName.isNotBlank() && phoneRows.any { it.localNumber.isNotBlank() }
-    val atBottom = scrollState.maxValue == 0 || scrollState.value >= (scrollState.maxValue - 56)
 
     fun localizedLabel(en: String, ta: String): String = if (selectedLanguage == "TA") ta else en
 
@@ -673,7 +676,7 @@ fun AddContactScreen(
     }
 
     if (showPhotoAdjustDialog && pendingPhotoSource != null) {
-        PhotoAdjustDialog(
+        PhotoAdjustScreen(
             source = pendingPhotoSource!!,
             selectedLanguage = selectedLanguage,
             initialScale = photoScale,
@@ -692,6 +695,7 @@ fun AddContactScreen(
                 photoOffsetY = offsetY
             }
         )
+        return
     }
 
     Column(
@@ -714,7 +718,7 @@ fun AddContactScreen(
                     .fillMaxSize()
                     .verticalScroll(scrollState)
                     .padding(horizontal = 12.dp, vertical = 10.dp)
-                    .padding(bottom = if (atBottom && !imeVisible) 18.dp else 90.dp),
+                    .padding(bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 SectionCard(
@@ -1122,15 +1126,7 @@ fun AddContactScreen(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = if (imeVisible) 18.dp else 76.dp)
-            )
-        }
-
-        if (!imeVisible && atBottom) {
-            SaveBottomBar(
-                selectedLanguage = selectedLanguage,
-                highlighted = canHighlightSave,
-                onSave = { saveContact() }
+                    .padding(bottom = 18.dp)
             )
         }
     }
@@ -3096,7 +3092,7 @@ private fun SaveBottomBar(selectedLanguage: String, highlighted: Boolean, onSave
 }
 
 @Composable
-private fun PhotoAdjustDialog(
+private fun PhotoAdjustScreen(
     source: String,
     selectedLanguage: String,
     initialScale: Float,
@@ -3106,88 +3102,207 @@ private fun PhotoAdjustDialog(
     onConfirm: (String, Float, Float, Float) -> Unit
 ) {
     val context = LocalContext.current
-    val bitmap = remember(source) { loadPhotoBitmap(context, encodePhotoSpec(source)) }
-    val viewportSize = 220f
-    var scale by rememberSaveable { mutableStateOf(initialScale.coerceAtLeast(1f)) }
-    var offsetX by rememberSaveable { mutableStateOf(specOffsetToDialogPx(initialOffsetX, viewportSize)) }
-    var offsetY by rememberSaveable { mutableStateOf(specOffsetToDialogPx(initialOffsetY, viewportSize)) }
+    val sourceBitmap = remember(source) { loadPhotoAndroidBitmap(context, source) }
+    val imageBitmap = remember(sourceBitmap) { sourceBitmap?.asImageBitmap() }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(28.dp), color = CardWhite) {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(if (selectedLanguage == "TA") "படத்தை சரிசெய்" else "Adjust Photo", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-                Text(
-                    text = if (selectedLanguage == "TA") "இழுத்து நகர்த்தவும். பிஞ்ச் செய்து பெரிதாக்கவும் அல்லது சுருக்கவும்." else "Drag to position. Pinch to zoom in or out.",
-                    color = MutedText,
-                    fontSize = 12.sp
+    var scale by rememberSaveable(source) { mutableStateOf(initialScale.coerceIn(1f, 5f)) }
+    var offsetX by rememberSaveable(source) { mutableStateOf(initialOffsetX) }
+    var offsetY by rememberSaveable(source) { mutableStateOf(initialOffsetY) }
+    var cropSizeFactor by rememberSaveable(source) { mutableStateOf(0.72f) }
+    var viewportWidthPx by remember { mutableStateOf(0f) }
+    var viewportHeightPx by remember { mutableStateOf(0f) }
+
+    fun commitCrop() {
+        val bitmap = sourceBitmap
+        val cropDiameterPx = (minOf(viewportWidthPx, viewportHeightPx) * cropSizeFactor).coerceAtLeast(80f)
+        val croppedSource = if (bitmap != null && viewportWidthPx > 0f && viewportHeightPx > 0f) {
+            cropVisiblePhotoToCache(
+                context = context,
+                bitmap = bitmap,
+                source = source,
+                viewportWidthPx = viewportWidthPx,
+                viewportHeightPx = viewportHeightPx,
+                cropCenterXPx = viewportWidthPx / 2f,
+                cropCenterYPx = viewportHeightPx / 2f,
+                cropDiameterPx = cropDiameterPx,
+                scale = scale,
+                offsetX = offsetX,
+                offsetY = offsetY
+            )
+        } else null
+        onConfirm(croppedSource ?: source, 1f, 0f, 0f)
+    }
+
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Color.Black)
+                .pointerInput(source) {
+                    detectTransformGestures(panZoomLock = false) { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 5f)
+                        offsetX += pan.x
+                        offsetY += pan.y
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            val density = LocalDensity.current
+            viewportWidthPx = with(density) { maxWidth.toPx() }
+            viewportHeightPx = with(density) { maxHeight.toPx() }
+            val cropDiameter = minOf(maxWidth, maxHeight) * cropSizeFactor
+
+            if (imageBitmap != null) {
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offsetX,
+                            translationY = offsetY
+                        )
                 )
-                Surface(
-                    modifier = Modifier.size(viewportSize.dp),
-                    shape = CircleShape,
-                    color = SearchBg,
-                    border = BorderStroke(1.dp, CardBorder)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .pointerInput(source) {
-                                detectTransformGestures(panZoomLock = true) { _, pan, zoom, _ ->
-                                    val updatedScale = (scale * zoom).coerceIn(1f, 4f)
-                                    val maxOffset = (viewportSize / 2f) * (updatedScale - 1f)
-                                    scale = updatedScale
-                                    offsetX = (offsetX + pan.x).coerceIn(-maxOffset, maxOffset)
-                                    offsetY = (offsetY + pan.y).coerceIn(-maxOffset, maxOffset)
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (bitmap != null) {
-                            Image(
-                                bitmap = bitmap,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer(
-                                        scaleX = scale,
-                                        scaleY = scale,
-                                        translationX = offsetX,
-                                        translationY = offsetY
-                                    )
-                            )
-                        }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = {
-                        scale = 1f
-                        offsetX = 0f
-                        offsetY = 0f
-                    }) {
-                        Text(if (selectedLanguage == "TA") "ரீசெட்" else "Reset")
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = onDismiss) {
-                            Text(if (selectedLanguage == "TA") "ரத்து" else "Cancel")
-                        }
-                        TextButton(onClick = { onConfirm(source, scale, offsetX / viewportSize, offsetY / viewportSize) }) {
-                            Text(if (selectedLanguage == "TA") "பயன்படுத்து" else "Apply")
-                        }
-                    }
-                }
+            } else {
+                Text(
+                    text = if (selectedLanguage == "TA") "படத்தை திறக்க முடியவில்லை" else "Unable to open photo",
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(18.dp)
+                )
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            ) {
+                val radius = cropDiameter.toPx() / 2f
+                val center = Offset(size.width / 2f, size.height / 2f)
+                drawRect(Color.Black.copy(alpha = 0.48f))
+                drawCircle(Color.Transparent, radius = radius, center = center, blendMode = BlendMode.Clear)
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.30f),
+                    radius = radius,
+                    center = center,
+                    style = Stroke(width = 1.2.dp.toPx())
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.78f),
+                    radius = radius,
+                    center = center,
+                    style = Stroke(width = 1.6.dp.toPx())
+                )
+
+                val left = center.x - radius
+                val right = center.x + radius
+                val top = center.y - radius
+                val bottom = center.y + radius
+                val bracket = 42.dp.toPx()
+                val stroke = 3.dp.toPx()
+                val bracketColor = Color.White.copy(alpha = 0.96f)
+                drawLine(bracketColor, Offset(left, top), Offset(left + bracket, top), stroke)
+                drawLine(bracketColor, Offset(left, top), Offset(left, top + bracket), stroke)
+                drawLine(bracketColor, Offset(right, top), Offset(right - bracket, top), stroke)
+                drawLine(bracketColor, Offset(right, top), Offset(right, top + bracket), stroke)
+                drawLine(bracketColor, Offset(left, bottom), Offset(left + bracket, bottom), stroke)
+                drawLine(bracketColor, Offset(left, bottom), Offset(left, bottom - bracket), stroke)
+                drawLine(bracketColor, Offset(right, bottom), Offset(right - bracket, bottom), stroke)
+                drawLine(bracketColor, Offset(right, bottom), Offset(right, bottom - bracket), stroke)
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(104.dp)
+                .background(Color.Black)
+                .padding(horizontal = 44.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = if (selectedLanguage == "TA") "ரத்து" else "Cancel",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            TextButton(onClick = { commitCrop() }) {
+                Text(
+                    text = if (selectedLanguage == "TA") "முடிந்தது" else "Done",
+                    color = Color.White,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
 }
+
+private fun cropVisiblePhotoToCache(
+    context: Context,
+    bitmap: Bitmap,
+    source: String,
+    viewportWidthPx: Float,
+    viewportHeightPx: Float,
+    cropCenterXPx: Float,
+    cropCenterYPx: Float,
+    cropDiameterPx: Float,
+    scale: Float,
+    offsetX: Float,
+    offsetY: Float
+): String? = runCatching {
+    val baseFitScale = minOf(viewportWidthPx / bitmap.width.toFloat(), viewportHeightPx / bitmap.height.toFloat())
+    val displayedWidth = bitmap.width * baseFitScale * scale
+    val displayedHeight = bitmap.height * baseFitScale * scale
+    val displayedLeft = (viewportWidthPx - displayedWidth) / 2f + offsetX
+    val displayedTop = (viewportHeightPx - displayedHeight) / 2f + offsetY
+    val sourceScale = baseFitScale * scale
+
+    val cropLeftInViewport = cropCenterXPx - cropDiameterPx / 2f
+    val cropTopInViewport = cropCenterYPx - cropDiameterPx / 2f
+    val sourceLeft = ((cropLeftInViewport - displayedLeft) / sourceScale).coerceIn(0f, bitmap.width.toFloat())
+    val sourceTop = ((cropTopInViewport - displayedTop) / sourceScale).coerceIn(0f, bitmap.height.toFloat())
+    val sourceRight = ((cropLeftInViewport + cropDiameterPx - displayedLeft) / sourceScale).coerceIn(0f, bitmap.width.toFloat())
+    val sourceBottom = ((cropTopInViewport + cropDiameterPx - displayedTop) / sourceScale).coerceIn(0f, bitmap.height.toFloat())
+
+    val sourceSize = minOf(sourceRight - sourceLeft, sourceBottom - sourceTop).coerceAtLeast(1f)
+    val adjustedLeft = sourceLeft.coerceAtMost(bitmap.width - sourceSize)
+    val adjustedTop = sourceTop.coerceAtMost(bitmap.height - sourceSize)
+
+    val outputSize = 512
+    val output = Bitmap.createBitmap(outputSize, outputSize, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(output)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
+    canvas.drawColor(android.graphics.Color.TRANSPARENT)
+    canvas.drawBitmap(
+        bitmap,
+        android.graphics.Rect(
+            adjustedLeft.toInt(),
+            adjustedTop.toInt(),
+            (adjustedLeft + sourceSize).toInt().coerceAtMost(bitmap.width),
+            (adjustedTop + sourceSize).toInt().coerceAtMost(bitmap.height)
+        ),
+        android.graphics.Rect(0, 0, outputSize, outputSize),
+        paint
+    )
+    saveBitmapToCache(context, output) ?: source
+}.getOrNull()
 
 private fun specOffsetToDialogPx(value: Float, viewportSize: Float): Float = if (abs(value) > 3f) value else value * viewportSize
 
@@ -3229,7 +3344,11 @@ private fun saveBitmapToCache(context: Context, bitmap: Bitmap): String? = runCa
 
 private fun loadPhotoBitmap(context: Context, specString: String?): ImageBitmap? {
     val spec = decodePhotoSpec(specString) ?: return null
-    val uri = Uri.parse(spec.source)
+    return loadPhotoAndroidBitmap(context, spec.source)?.asImageBitmap()
+}
+
+private fun loadPhotoAndroidBitmap(context: Context, source: String): Bitmap? {
+    val uri = Uri.parse(source)
     return runCatching {
         val bytes = if (uri.scheme == "file") {
             val path = uri.path ?: return@runCatching null
@@ -3239,7 +3358,7 @@ private fun loadPhotoBitmap(context: Context, specString: String?): ImageBitmap?
         } ?: return@runCatching null
 
         val rawBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@runCatching null
-        rotateBitmapIfRequired(rawBitmap, bytes).asImageBitmap()
+        rotateBitmapIfRequired(rawBitmap, bytes)
     }.getOrNull()
 }
 
